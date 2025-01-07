@@ -29,6 +29,7 @@ namespace IQM::GPU {
 
     private:
         void prepareBuffers(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput);
+        void prepareImages(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
         void copyToGpu(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput);
         void copyFromGpu(const VulkanRuntime &runtime, size_t sizeOutput);
 
@@ -36,6 +37,14 @@ namespace IQM::GPU {
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
+
+        std::shared_ptr<VulkanImage> inputImage;
+        std::shared_ptr<VulkanImage> refImage;
+
+        vk::raii::Buffer stgInput = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory stgInputMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer stgRef = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
 
         vk::raii::Buffer inputBuffer = VK_NULL_HANDLE;
         vk::raii::Buffer outBuffer = VK_NULL_HANDLE;

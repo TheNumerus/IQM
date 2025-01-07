@@ -40,8 +40,10 @@ IQM::GPU::SVDResult IQM::GPU::SVD::computeMetric(const VulkanRuntime &runtime, c
     std::vector<float> data(bufSize);
 
     this->prepareBuffers(runtime, bufSize * sizeof(float), outBufSize * sizeof(float));
-
     res.timestamps.mark("buffers prepared");
+
+    this->prepareImages(runtime, image, ref);
+    res.timestamps.mark("images prepared");
 
     cv::Mat inputColor(image.data);
     inputColor = inputColor.reshape(4, image.height);
@@ -61,13 +63,13 @@ IQM::GPU::SVDResult IQM::GPU::SVD::computeMetric(const VulkanRuntime &runtime, c
 
     // create parallel iterator
     std::vector<int> nums;
-    for (int y = 0; (y + 8) < image.height; y+=8) {
+    for (int y = 0; (y + 8) <= image.height; y+=8) {
         nums.push_back(y);
     }
 
     std::for_each(std::execution::par, nums.begin(), nums.end(), [&](const int &y) {
         // only process full 8x8 blocks
-        for (int x = 0; (x + 8) < image.width; x+=8) {
+        for (int x = 0; (x + 8) <= image.width; x+=8) {
             cv::Rect crop(x, y, 8, 8);
             cv::Mat srcCrop = inputFloat(crop);
             cv::Mat refCrop = refFloat(crop);
@@ -189,6 +191,101 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     outBuf.bindMemory(outMem, 0);
     this->outBuffer = std::move(outBuf);
     this->outMemory = std::move(outMem);
+}
+
+void IQM::GPU::SVD::prepareImages(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref) {
+    // always 4 channels on input, with 1B per channel
+    const auto size = image.width * image.height * 4;
+    auto [stgBuf, stgMem] = runtime.createBuffer(
+        size,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    );
+    auto [stgRefBuf, stgRefMem] = runtime.createBuffer(
+        size,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    );
+
+    stgBuf.bindMemory(stgMem, 0);
+    stgRefBuf.bindMemory(stgRefMem, 0);
+
+    void * inBufData = stgMem.mapMemory(0, size, {});
+    memcpy(inBufData, image.data.data(), size);
+    stgMem.unmapMemory();
+
+    inBufData = stgRefMem.mapMemory(0, size, {});
+    memcpy(inBufData, ref.data.data(), size);
+    stgRefMem.unmapMemory();
+
+    this->stgInput = std::move(stgBuf);
+    this->stgInputMemory = std::move(stgMem);
+    this->stgRef = std::move(stgRefBuf);
+    this->stgRefMemory = std::move(stgRefMem);
+
+    vk::ImageCreateInfo srcImageInfo = {
+        .flags = {},
+        .imageType = vk::ImageType::e2D,
+        .format = vk::Format::eR8G8B8A8Unorm,
+        .extent = vk::Extent3D(image.width, image.height, 1),
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = vk::SampleCountFlagBits::e1,
+        .tiling = vk::ImageTiling::eOptimal,
+        .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
+        .sharingMode = vk::SharingMode::eExclusive,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr,
+        .initialLayout = vk::ImageLayout::eUndefined,
+    };
+
+    vk::ImageCreateInfo lumaImageInfo {srcImageInfo};
+    lumaImageInfo.format = vk::Format::eR32G32Sfloat;
+    lumaImageInfo.usage = vk::ImageUsageFlagBits::eStorage;
+
+    vk::ImageCreateInfo dstImageInfo = {srcImageInfo};
+    dstImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
+    dstImageInfo.format = vk::Format::eR32Sfloat;
+
+    this->inputImage = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
+    this->refImage = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
+
+    // copy data to images, correct formats
+    const vk::CommandBufferBeginInfo beginInfo = {
+        .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+    };
+    runtime._cmd_bufferTransfer->begin(beginInfo);
+
+    VulkanRuntime::initImages(runtime._cmd_bufferTransfer, {
+        this->inputImage,
+        this->refImage,
+    });
+
+    vk::BufferImageCopy copyRegion{
+        .bufferOffset = 0,
+        .bufferRowLength = static_cast<unsigned>(image.width),
+        .bufferImageHeight = static_cast<unsigned>(image.height),
+        .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+        .imageOffset = vk::Offset3D{0, 0, 0},
+        .imageExtent = vk::Extent3D{static_cast<unsigned>(image.width), static_cast<unsigned>(image.height), 1}
+    };
+    runtime._cmd_bufferTransfer->copyBufferToImage(this->stgInput, this->inputImage->image,  vk::ImageLayout::eGeneral, copyRegion);
+    runtime._cmd_bufferTransfer->copyBufferToImage(this->stgRef, this->refImage->image,  vk::ImageLayout::eGeneral, copyRegion);
+
+    runtime._cmd_bufferTransfer->end();
+
+    const std::vector cmdBufsCopy = {
+        &**runtime._cmd_bufferTransfer
+    };
+
+    const vk::SubmitInfo submitInfoCopy{
+        .commandBufferCount = 1,
+        .pCommandBuffers = *cmdBufsCopy.data(),
+        /*.signalSemaphoreCount = 1,
+        .pSignalSemaphores = &*this->uploadDone*/
+    };
+
+    runtime._transferQueue->submit(submitInfoCopy, {});
 }
 
 void IQM::GPU::SVD::copyToGpu(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput) {
