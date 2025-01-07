@@ -16,6 +16,12 @@ namespace IQM::GPU {
 
         vk::raii::DeviceMemory noisePowersMemory = VK_NULL_HANDLE;
         vk::raii::Buffer noisePowers = VK_NULL_HANDLE;
+
+        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
     private:
         void copyBackToGpu(const VulkanRuntime &runtime, const vk::raii::Buffer &stgBuf);
         void copyFilterToCpu(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuf, const vk::raii::Buffer &target, int width, int height, int index);
