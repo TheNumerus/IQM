@@ -26,7 +26,6 @@ namespace IQM::GPU {
     public:
         explicit SSIM(const VulkanRuntime &runtime);
         SSIMResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
-        [[nodiscard]] double computeMSSIM(const float *buffer, unsigned width, unsigned height) const;
 
         int kernelSize = 11;
         float k_1 = 0.01;
@@ -49,6 +48,13 @@ namespace IQM::GPU {
         vk::raii::PipelineLayout layoutGaussInput = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGaussInput = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGaussInput = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetGaussInputHorizontal = VK_NULL_HANDLE;
+
+        vk::raii::ShaderModule kernelMssim = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout layoutMssim = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineMssim = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutMssim = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetMssim = VK_NULL_HANDLE;
 
         vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
         vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
@@ -58,11 +64,19 @@ namespace IQM::GPU {
         vk::raii::DeviceMemory stgInputMemory = VK_NULL_HANDLE;
         vk::raii::Buffer stgRef = VK_NULL_HANDLE;
         vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer mssimBuf = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory mssimMemory = VK_NULL_HANDLE;
 
+        // RGBA u8 input images
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
+
+        // RG f32 intermediate images
         std::shared_ptr<VulkanImage> imageLuma;
+        std::shared_ptr<VulkanImage> imageTemp;
         std::shared_ptr<VulkanImage> imageLumaBlurred;
+
+        // R f32 output image
         std::shared_ptr<VulkanImage> imageOut;
 
         void prepareImages(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);

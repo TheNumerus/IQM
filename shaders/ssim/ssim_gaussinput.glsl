@@ -1,13 +1,12 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #version 450
 #pragma shader_stage(compute)
 
-#define E 2.71828182846
-#define PI 3.141592653589
+#include "ssim_shared.glsl"
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
@@ -17,12 +16,8 @@ layout(set = 0, binding = 1, rg32f) uniform writeonly image2D output_img;
 layout( push_constant ) uniform constants {
     int kernelSize;
     float sigma;
+    int direction;
 } push_consts;
-
-float gaussWeight(ivec2 offset) {
-    float dist = (offset.x * offset.x) + (offset.y * offset.y);
-    return pow(E, -(dist / (2.0 * pow(push_consts.sigma, 2.0))));
-}
 
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -39,14 +34,28 @@ void main() {
     float totalWeight = 0.0;
     int start = -(push_consts.kernelSize - 1) / 2;
     int end = (push_consts.kernelSize - 1) / 2;
-    for (int xOffset = start; xOffset <= end; xOffset++) {
-        for (int yOffset = start; yOffset <= end; yOffset++) {
+
+    if (push_consts.direction == 0) {
+        // horizontal blur
+        for (int xOffset = start; xOffset <= end; xOffset++) {
             int x = pos.x + xOffset;
-            int y = pos.y + yOffset;
-            if (x >= maxPos.x || y >= maxPos.y || x < 0 || y < 0) {
+            int y = pos.y;
+            if (x >= maxPos.x || x < 0) {
                 continue;
             }
-            float weight = gaussWeight(ivec2(xOffset, yOffset));
+            float weight = gaussWeight(ivec2(xOffset, 0), push_consts.sigma);
+            total += imageLoad(input_img, ivec2(x, y)).xy * weight;
+            totalWeight += weight;
+        }
+    } else {
+        // vertical blur
+        for (int yOffset = start; yOffset <= end; yOffset++) {
+            int x = pos.x;
+            int y = pos.y + yOffset;
+            if (y >= maxPos.y || y < 0) {
+                continue;
+            }
+            float weight = gaussWeight(ivec2(0, yOffset), push_consts.sigma);
             total += imageLoad(input_img, ivec2(x, y)).xy * weight;
             totalWeight += weight;
         }

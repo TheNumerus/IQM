@@ -11,6 +11,11 @@ for i in $dirs; do
 done
 
 for i in $files; do
+  # check if shader file contains "void main", if not, it's shared file with definitions, so don't compile it
+  grep "void main" $i >> /dev/null
+  if [[ $? = 1 ]]; then
+    continue
+  fi
   # remove suffix and prefix
   path=${i#shaders/}
   path=${path%.glsl}

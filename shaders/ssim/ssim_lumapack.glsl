@@ -1,13 +1,10 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #version 450
 #pragma shader_stage(compute)
-
-#define E 2.71828182846
-#define PI 3.141592653589
 
 layout (local_size_x = 16, local_size_y = 16) in;
 

@@ -60,7 +60,7 @@ std::vector<unsigned char> convertFloatToChar(const std::vector<float>& data) {
     std::vector<unsigned char> result(data.size());
 
     for (int i = 0; i < data.size(); ++i) {
-        result[i] = static_cast<unsigned char>(data[i] * 255.0f);
+        result[i] = static_cast<unsigned char>(std::clamp(data[i], 0.0f, 1.0f) * 255.0f);
     }
 
     return result;
