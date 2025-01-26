@@ -4,6 +4,8 @@
  */
 
 #include "fsim.h"
+
+#include "fft_planner.h"
 #include "../img_params.h"
 
 static uint32_t srcDownscale[] =
@@ -362,72 +364,16 @@ void IQM::GPU::FSIM::createGradientMap(const VulkanRuntime &runtime, int width, 
 }
 
 void IQM::GPU::FSIM::initFftLibrary(const VulkanRuntime &runtime, const int width, const int height) {
-    // image size * 2 float components (complex numbers) * 2 batches
-    uint64_t bufferSize = width * height * sizeof(float) * 2 * 2;
-
-    VkFFTApplication fftApp = {};
-
-    VkFFTConfiguration fftConfig = {};
-    fftConfig.FFTdim = 2;
-    fftConfig.size[0] = width;
-    fftConfig.size[1] = height;
-    fftConfig.bufferSize = &bufferSize;
-
-    VkDevice deviceRef = *runtime._device;
-    VkPhysicalDevice physDeviceRef = *runtime._physicalDevice;
-    VkQueue queueRef = **runtime._queue;
-    VkCommandPool cmdPoolRef = **runtime._commandPool;
-    fftConfig.physicalDevice = &physDeviceRef;
-    fftConfig.device = &deviceRef;
-    fftConfig.queue = &queueRef;
-    fftConfig.commandPool = &cmdPoolRef;
-    fftConfig.numberBatches = 2;
-    fftConfig.makeForwardPlanOnly = true;
-
     this->fftFence =  vk::raii::Fence{runtime._device, vk::FenceCreateInfo{}};
-    VkFence fenceRef = *this->fftFence;
-    fftConfig.fence = &fenceRef;
-
-    if (initializeVkFFT(&fftApp, fftConfig) != VKFFT_SUCCESS) {
-        throw std::runtime_error("failed to initialize FFT");
-    }
-
-    this->fftApplication = fftApp;
-
-    // (image size * 2 float components (complex numbers) ) * 16 filters * 3 cases (by itself, times input, times reference)
-    uint64_t bufferSizeInverse = width * height * sizeof(float) * 2 * FSIM_ORIENTATIONS * FSIM_SCALES * 3;
-
-    VkFFTApplication fftAppInverse = {};
-
-    VkFFTConfiguration fftConfigInverse = {};
-    fftConfigInverse.FFTdim = 2;
-    fftConfigInverse.size[0] = width;
-    fftConfigInverse.size[1] = height;
-    fftConfigInverse.bufferSize = &bufferSizeInverse;
-
-    fftConfigInverse.physicalDevice = &physDeviceRef;
-    fftConfigInverse.device = &deviceRef;
-    fftConfigInverse.queue = &queueRef;
-    fftConfigInverse.commandPool = &cmdPoolRef;
-    fftConfigInverse.numberBatches = 16 * 3;
-    fftConfigInverse.makeInversePlanOnly = true;
-    fftConfigInverse.normalize = true;
-    fftConfigInverse.isCompilerInitialized = true;
-
     this->fftFenceInverse =  vk::raii::Fence{runtime._device, vk::FenceCreateInfo{}};
-    VkFence fenceRefInverse = *this->fftFenceInverse;
-    fftConfigInverse.fence = &fenceRefInverse;
 
-    if (initializeVkFFT(&fftAppInverse, fftConfigInverse) != VKFFT_SUCCESS) {
-        throw std::runtime_error("failed to initialize FFT");
-    }
-
-    this->fftApplicationInverse = fftAppInverse;
+    this->fftApplication = FftPlanner::initForward(runtime, this->fftFence, width, height);
+    this->fftApplicationInverse = FftPlanner::initInverse(runtime, this->fftFenceInverse, width, height);
 }
 
 void IQM::GPU::FSIM::teardownFftLibrary() {
-    deleteVkFFT(&this->fftApplicationInverse);
-    deleteVkFFT(&this->fftApplication);
+    FftPlanner::destroy(this->fftApplication);
+    FftPlanner::destroy(this->fftApplicationInverse);
 }
 
 void IQM::GPU::FSIM::computeFft(const VulkanRuntime &runtime, const int width, const int height) {

@@ -20,6 +20,7 @@ add_library(IQM-FSIM STATIC fsim.cpp
         steps/fsim_phase_congruency.h
         steps/fsim_estimate_energy.cpp
         steps/fsim_estimate_energy.h
+        fft_planner.h
 )
 
 target_include_directories(IQM-FSIM
