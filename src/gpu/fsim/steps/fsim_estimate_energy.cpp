@@ -57,11 +57,6 @@ IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const VulkanRuntime &runtime) {
 void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuf, const int width, const int height) {
     this->prepareBufferStorage(runtime, fftBuf, width, height);
 
-    const vk::CommandBufferBeginInfo beginInfo = {
-        .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
-    };
-    runtime._cmd_buffer->begin(beginInfo);
-
     runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->estimateEnergyPipeline);
     runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->estimateEnergyLayout, 0, {this->estimateEnergyDescSet}, {});
     runtime._cmd_buffer->pushConstants<unsigned>(this->estimateEnergyLayout, vk::ShaderStageFlagBits::eCompute, 0, width * height);

@@ -4,6 +4,8 @@ searchPath="*shaders/*"
 files=`find $searchPath -type f`
 dirs=`find $searchPath -type d`
 
+rm -rf shaders_out
+
 # first create subfolders as needed
 for i in $dirs; do
   path=${i#shaders/}
@@ -20,5 +22,5 @@ for i in $files; do
   path=${i#shaders/}
   path=${path%.glsl}
   # compile shaders to files which are then included
-  glslc "$i" -o "shaders_out/$path.inc" -mfmt=c
+  glslc "$i" -o "shaders_out/$path.inc" -mfmt=c --target-env=vulkan1.2
 done

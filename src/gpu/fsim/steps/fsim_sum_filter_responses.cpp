@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_sum_filter_responses.h"
@@ -56,6 +56,19 @@ void IQM::GPU::FSIMSumFilterResponses::computeSums(const VulkanRuntime &runtime,
     VulkanRuntime::initImages(runtime._cmd_buffer, images);
 
     runtime._cmd_buffer->dispatch(groupsX, groupsY, FSIM_ORIENTATIONS);
+
+    vk::MemoryBarrier barrier = {
+        .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+    };
+    runtime._cmd_buffer->pipelineBarrier(
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::DependencyFlagBits::eDeviceGroup,
+        {barrier},
+        {},
+        {}
+    );
 }
 
 void IQM::GPU::FSIMSumFilterResponses::prepareImageStorage(const VulkanRuntime &runtime, const vk::raii::Buffer &filters, int width, int height) {

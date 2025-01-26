@@ -17,15 +17,38 @@ namespace IQM::GPU {
         vk::raii::DeviceMemory noisePowersMemory = VK_NULL_HANDLE;
         vk::raii::Buffer noisePowers = VK_NULL_HANDLE;
 
+        vk::raii::DeviceMemory noisePowersSortMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer noisePowersSortBuf = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory noisePowersTempMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer noisePowersTempBuf = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory noisePowersSortHistogramMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer noisePowersSortHistogramBuf = VK_NULL_HANDLE;
+
         vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
+
+        vk::raii::ShaderModule kernelSort = VK_NULL_HANDLE;
+        vk::raii::ShaderModule kernelSortHistogram = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout layoutSort = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout layoutSortHistogram = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineSort = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineSortHistogram = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutSort = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetSortEven = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetSortOdd = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetSortHistogramEven = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetSortHistogramOdd = VK_NULL_HANDLE;
+
+        vk::raii::ShaderModule kernelNoisePower = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout layoutNoisePower = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineNoisePower = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutNoisePower = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetNoisePower = VK_NULL_HANDLE;
     private:
-        void copyBackToGpu(const VulkanRuntime &runtime, const vk::raii::Buffer &stgBuf);
-        void copyFilterToCpu(const VulkanRuntime &runtime, const vk::raii::Buffer &tempBuf, const vk::raii::Buffer &target, int width, int height);
-        void copyFilterSumsToCpu(const VulkanRuntime & runtime, const vk::raii::Buffer & buffer, const vk::raii::Buffer & vk_buffer);
+        void prepareStorage(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuffer, const vk::raii::Buffer &filterSums, unsigned size, unsigned histBufSize);
     };
 }
 

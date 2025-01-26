@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim.h"
@@ -133,15 +133,9 @@ IQM::GPU::FSIMResult IQM::GPU::FSIM::computeMetric(const VulkanRuntime &runtime,
     this->computeFft(runtime, widthDownscale, heightDownscale);
     this->combinations.combineFilters(runtime, this->angularFilter, this->logGaborFilter, this->bufferFft, widthDownscale, heightDownscale);
     this->computeMassInverseFft(runtime, this->combinations.fftBuffer);
-
-    this->sumFilterResponses.computeSums(runtime, this->combinations.fftBuffer, widthDownscale, heightDownscale);
-    result.timestamps.mark("pre median work recorded");
-
+    this->sumFilterResponses.computeSums(runtime, this->combinations.fftBuffer, widthDownscale, heightDownscale);;
     this->noise_power.computeNoisePower(runtime, this->combinations.noiseLevels, this->combinations.fftBuffer, widthDownscale, heightDownscale);
-    result.timestamps.mark("noise powers computed");
-
     this->estimateEnergy.estimateEnergy(runtime, this->combinations.fftBuffer, widthDownscale, heightDownscale);
-
     this->phaseCongruency.compute(runtime, this->noise_power.noisePowers, this->estimateEnergy.energyBuffers, this->sumFilterResponses.filterResponsesInput, this->sumFilterResponses.filterResponsesRef, widthDownscale, heightDownscale);
 
     auto metrics = this->final_multiply.computeMetrics(
