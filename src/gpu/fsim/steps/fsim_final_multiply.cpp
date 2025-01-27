@@ -194,7 +194,7 @@ std::pair<float, float> IQM::GPU::FSIMFinalMultiply::sumImages(const VulkanRunti
 
     uint32_t bufferSize = width * height;
     for (unsigned i = 0; i < 3; i++) {
-        uint64_t groups = (bufferSize / 128) + 1;
+        uint64_t groups = (bufferSize / 1024) + 1;
         uint32_t size = bufferSize;
 
         const vk::BufferImageCopy regionTo {
@@ -247,7 +247,7 @@ std::pair<float, float> IQM::GPU::FSIMFinalMultiply::sumImages(const VulkanRunti
                 break;
             }
             size = groups;
-            groups = (groups / 128) + 1;
+            groups = (groups / 1024) + 1;
         }
 
         const vk::BufferCopy regionFrom = {

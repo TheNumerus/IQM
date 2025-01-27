@@ -505,12 +505,6 @@ void IQM::GPU::VulkanRuntime::initQueues() {
 }
 
 void IQM::GPU::VulkanRuntime::initDescriptors() {
-    this->_descLayoutThreeImage = std::move(this->createDescLayout({
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageImage, 1},
-    }));
-
     this->_descLayoutTwoImage = std::move(this->createDescLayout({
         {vk::DescriptorType::eStorageImage, 1},
         {vk::DescriptorType::eStorageImage, 1},

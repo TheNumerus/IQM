@@ -102,7 +102,7 @@ void IQM::GPU::FSIMFilterCombinations::combineFilters(const VulkanRuntime &runti
             {},
             {}
         );
-        uint64_t groups = (bufferSize / 128) + 1;
+        uint64_t groups = (bufferSize / 1024) + 1;
         uint32_t size = bufferSize;
         bool doPower = true;
 
@@ -128,7 +128,7 @@ void IQM::GPU::FSIMFilterCombinations::combineFilters(const VulkanRuntime &runti
                 break;
             }
             size = groups;
-            groups = (groups / 128) + 1;
+            groups = (groups / 1024) + 1;
             doPower = false;
         }
     }

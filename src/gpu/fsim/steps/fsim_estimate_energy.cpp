@@ -85,7 +85,7 @@ void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, 
     uint32_t bufferSize = width * height;
     // now sum
     for (int o = 0; o < FSIM_ORIENTATIONS * 2; o++) {
-        uint64_t groups = (bufferSize / 128) + 1;
+        uint64_t groups = (bufferSize / 1024) + 1;
         uint32_t size = bufferSize;
 
         for (;;) {
@@ -112,7 +112,7 @@ void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, 
                 break;
             }
             size = groups;
-            groups = (groups / 128) + 1;
+            groups = (groups / 1024) + 1;
         }
     }
 }
