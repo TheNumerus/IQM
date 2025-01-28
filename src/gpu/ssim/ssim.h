@@ -47,9 +47,10 @@ namespace IQM::GPU {
         vk::raii::DescriptorSet descSetLumapack = VK_NULL_HANDLE;
 
         vk::raii::ShaderModule kernelGauss = VK_NULL_HANDLE;
+        vk::raii::ShaderModule kernelGaussHorizontal = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutGauss = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGauss = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout descSetLayoutGauss = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineGaussHorizontal = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGauss = VK_NULL_HANDLE;
 
         vk::raii::ShaderModule kernelMssim = VK_NULL_HANDLE;
@@ -75,7 +76,7 @@ namespace IQM::GPU {
 
         // R f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesBlurred;
-        std::vector<std::shared_ptr<VulkanImage>> imagesBlurredTemp;
+        std::shared_ptr<VulkanImage> imageBlurredTemp;
 
         // R f32 output image
         std::shared_ptr<VulkanImage> imageOut;

@@ -13,6 +13,10 @@ static uint32_t srcLumapack[] =
 #include <ssim/ssim_lumapack.inc>
 ;
 
+static uint32_t srcGaussHorizontal[] =
+#include <ssim/ssim_gauss_horizontal.inc>
+;
+
 static uint32_t srcGauss[] =
 #include <ssim/ssim_gauss.inc>
 ;
@@ -24,16 +28,12 @@ static uint32_t srcMssim[] =
 IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     this->kernelSsim = runtime.createShaderModule(src, sizeof(src));
     this->kernelLumapack = runtime.createShaderModule(srcLumapack, sizeof(srcLumapack));
+    this->kernelGaussHorizontal = runtime.createShaderModule(srcGaussHorizontal, sizeof(srcGaussHorizontal));
     this->kernelGauss = runtime.createShaderModule(srcGauss, sizeof(srcGauss));
     this->kernelMssim = runtime.createShaderModule(srcMssim, sizeof(srcMssim));
 
     this->descSetLayoutLumapack = runtime.createDescLayout({
         {vk::DescriptorType::eStorageImage, 2},
-        {vk::DescriptorType::eStorageImage, 5},
-    });
-
-    this->descSetLayoutGauss = runtime.createDescLayout({
-        {vk::DescriptorType::eStorageImage, 5},
         {vk::DescriptorType::eStorageImage, 5},
     });
 
@@ -48,7 +48,7 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
 
     const std::vector allocateLayouts = {
         *this->descSetLayoutLumapack,
-        *this->descSetLayoutGauss,
+        *this->descSetLayoutSsim,
         *this->descSetLayoutSsim,
         *this->descSetLayoutMssim
     };
@@ -77,12 +77,13 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     const auto rangeMssim = VulkanRuntime::createPushConstantRange( sizeof(int));
 
     this->layoutLumapack = runtime.createPipelineLayout({*this->descSetLayoutLumapack}, {});
-    this->layoutGauss = runtime.createPipelineLayout({*this->descSetLayoutGauss}, rangesGauss);
+    this->layoutGauss = runtime.createPipelineLayout({*this->descSetLayoutSsim}, rangesGauss);
     this->layoutSsim = runtime.createPipelineLayout({*this->descSetLayoutSsim}, ranges);
     this->layoutMssim = runtime.createPipelineLayout({*this->descSetLayoutMssim}, rangeMssim);
 
     this->pipelineLumapack = runtime.createComputePipeline(this->kernelLumapack, this->layoutLumapack);
     this->pipelineGauss = runtime.createComputePipeline(this->kernelGauss, this->layoutGauss);
+    this->pipelineGaussHorizontal = runtime.createComputePipeline(this->kernelGaussHorizontal, this->layoutGauss);
     this->pipelineSsim = runtime.createComputePipeline(this->kernelSsim, this->layoutSsim);
     this->pipelineMssim = runtime.createComputePipeline(this->kernelMssim, this->layoutMssim);
 
@@ -91,7 +92,6 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     this->transferFence = runtime._device.createFence(vk::FenceCreateInfo{});
 
     this->imagesBlurred = std::vector<std::shared_ptr<VulkanImage>>(5, VK_NULL_HANDLE);
-    this->imagesBlurredTemp = std::vector<std::shared_ptr<VulkanImage>>(5, VK_NULL_HANDLE);
 }
 
 IQM::GPU::SSIMResult IQM::GPU::SSIM::computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref) {
@@ -116,10 +116,9 @@ IQM::GPU::SSIMResult IQM::GPU::SSIM::computeMetric(const VulkanRuntime &runtime,
     runtime._cmd_buffer->dispatch(groupsX, groupsY, 1);
 
     std::vector<vk::ImageMemoryBarrier> barriers(5);
-    std::vector<vk::ImageMemoryBarrier> barriersTemp(5);
 
     for (size_t i = 0; i < barriers.size(); i++) {
-        barriers[i] = barriersTemp[i] = {
+        barriers[i] = {
             .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
             .dstAccessMask = vk::AccessFlagBits::eShaderRead,
             .oldLayout = vk::ImageLayout::eGeneral,
@@ -135,47 +134,53 @@ IQM::GPU::SSIMResult IQM::GPU::SSIM::computeMetric(const VulkanRuntime &runtime,
                 .layerCount = 1
             }
         };
-        barriersTemp[i].image = this->imagesBlurredTemp[i]->image;
     }
 
-    runtime._cmd_buffer->pipelineBarrier(
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::DependencyFlagBits::eDeviceGroup, {}, {}, barriers
-    );
-
-    runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineGauss);
-    runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGauss, 0, {this->descSetGauss}, {});
-
-    std::array valuesGauss = {
-        this->kernelSize,
-        *reinterpret_cast<int *>(&this->sigma),
-        0,
-    };
-    runtime._cmd_buffer->pushConstants<int>(this->layoutGauss, vk::ShaderStageFlagBits::eCompute, 0, valuesGauss);
-
-    runtime._cmd_buffer->dispatch(groupsX, groupsY, 5);
-
-    runtime._cmd_buffer->pipelineBarrier(
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::DependencyFlagBits::eDeviceGroup, {}, {}, barriersTemp
-    );
-
-    valuesGauss = {
-        this->kernelSize,
-        *reinterpret_cast<int *>(&this->sigma),
-        1,
-    };
-    runtime._cmd_buffer->pushConstants<int>(this->layoutGauss, vk::ShaderStageFlagBits::eCompute, 0, valuesGauss);
-
-    runtime._cmd_buffer->dispatch(groupsX, groupsY, 5);
+    vk::ImageMemoryBarrier barrierTemp = barriers[0];
+    barrierTemp.image = this->imageBlurredTemp->image;
 
     runtime._cmd_buffer->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlagBits::eDeviceGroup, {}, {}, barriers
     );
+
+    for (int i = 0; i < 5; i++) {
+        runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineGaussHorizontal);
+        runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGauss, 0, {this->descSetGauss}, {});
+
+        std::array valuesGauss = {
+            this->kernelSize,
+            *reinterpret_cast<int *>(&this->sigma),
+            i,
+        };
+        runtime._cmd_buffer->pushConstants<int>(this->layoutGauss, vk::ShaderStageFlagBits::eCompute, 0, valuesGauss);
+
+        runtime._cmd_buffer->dispatch(groupsX, groupsY, 1);
+
+        runtime._cmd_buffer->pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup, {}, {}, barrierTemp
+        );
+
+        valuesGauss = {
+            this->kernelSize,
+            *reinterpret_cast<int *>(&this->sigma),
+            i,
+        };
+
+        runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineGauss);
+        runtime._cmd_buffer->pushConstants<int>(this->layoutGauss, vk::ShaderStageFlagBits::eCompute, 0, valuesGauss);
+
+        runtime._cmd_buffer->dispatch(groupsX, groupsY, 1);
+
+        runtime._cmd_buffer->pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup, {}, {}, barriers
+        );
+    }
 
     runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSsim);
     runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSsim, 0, {this->descSetSsim}, {});
@@ -429,10 +434,10 @@ void IQM::GPU::SSIM::prepareImages(const VulkanRuntime &runtime, Timestamps& tim
     this->imageInput = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
     this->imageRef = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
     this->imageOut = std::make_shared<VulkanImage>(runtime.createImage(dstImageInfo));
+    this->imageBlurredTemp = std::make_shared<VulkanImage>(runtime.createImage(intermediateImageInfo));
 
     for (int i = 0; i < 5; i++) {
         this->imagesBlurred[i] = std::move(std::make_shared<VulkanImage>(runtime.createImage(intermediateImageInfo)));
-        this->imagesBlurredTemp[i] = std::move(std::make_shared<VulkanImage>(runtime.createImage(intermediateImageInfo)));
     }
 
     timestamps.mark("images created");
@@ -447,10 +452,10 @@ void IQM::GPU::SSIM::prepareImages(const VulkanRuntime &runtime, Timestamps& tim
         this->imageInput,
         this->imageRef,
         this->imageOut,
+        this->imageBlurredTemp,
     };
 
     imagesToInit.insert(imagesToInit.end(), this->imagesBlurred.begin(), this->imagesBlurred.end());
-    imagesToInit.insert(imagesToInit.end(), this->imagesBlurredTemp.begin(), this->imagesBlurredTemp.end());
 
     VulkanRuntime::initImages(runtime._cmd_bufferTransfer, imagesToInit);
 
@@ -483,7 +488,7 @@ void IQM::GPU::SSIM::prepareImages(const VulkanRuntime &runtime, Timestamps& tim
     timestamps.mark("copy sumbited");
 
     auto imageInfosIntermediate = VulkanRuntime::createImageInfos(this->imagesBlurred);
-    auto imageInfosIntermediateTemp = VulkanRuntime::createImageInfos(this->imagesBlurredTemp);
+    auto imageInfosIntermediateTemp = VulkanRuntime::createImageInfos({this->imageBlurredTemp});
 
     auto inputImageInfos = VulkanRuntime::createImageInfos({
         this->imageInput,
