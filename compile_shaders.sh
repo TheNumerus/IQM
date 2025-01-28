@@ -5,6 +5,8 @@ files=`find $searchPath -type f`
 dirs=`find $searchPath -type d`
 
 rm -rf shaders_out
+mkdir shaders_out
+touch shaders_out/.gitkeep
 
 # first create subfolders as needed
 for i in $dirs; do
