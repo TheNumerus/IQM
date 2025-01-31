@@ -5,32 +5,32 @@
 
 #include "ssim.h"
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <ssim/ssim.inc>
 ;
 
-static uint32_t srcLumapack[] =
+static std::vector<uint32_t> srcLumapack =
 #include <ssim/ssim_lumapack.inc>
 ;
 
-static uint32_t srcGaussHorizontal[] =
+static std::vector<uint32_t> srcGaussHorizontal =
 #include <ssim/ssim_gauss_horizontal.inc>
 ;
 
-static uint32_t srcGauss[] =
+static std::vector<uint32_t> srcGauss =
 #include <ssim/ssim_gauss.inc>
 ;
 
-static uint32_t srcMssim[] =
+static std::vector<uint32_t> srcMssim =
 #include <ssim/mssim_sum.inc>
 ;
 
 IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
-    this->kernelSsim = runtime.createShaderModule(src, sizeof(src));
-    this->kernelLumapack = runtime.createShaderModule(srcLumapack, sizeof(srcLumapack));
-    this->kernelGaussHorizontal = runtime.createShaderModule(srcGaussHorizontal, sizeof(srcGaussHorizontal));
-    this->kernelGauss = runtime.createShaderModule(srcGauss, sizeof(srcGauss));
-    this->kernelMssim = runtime.createShaderModule(srcMssim, sizeof(srcMssim));
+    const auto smSsim = VulkanRuntime::createShaderModule(runtime._device, src);
+    const auto smLumapack = VulkanRuntime::createShaderModule(runtime._device,srcLumapack);
+    const auto smGaussHorizontal = VulkanRuntime::createShaderModule(runtime._device, srcGaussHorizontal);
+    const auto smGauss = VulkanRuntime::createShaderModule(runtime._device, srcGauss);
+    const auto smMssim = VulkanRuntime::createShaderModule(runtime._device, srcMssim);
 
     this->descSetLayoutLumapack = runtime.createDescLayout({
         {vk::DescriptorType::eStorageImage, 2},
@@ -81,11 +81,11 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     this->layoutSsim = runtime.createPipelineLayout({*this->descSetLayoutSsim}, ranges);
     this->layoutMssim = runtime.createPipelineLayout({*this->descSetLayoutMssim}, rangeMssim);
 
-    this->pipelineLumapack = runtime.createComputePipeline(this->kernelLumapack, this->layoutLumapack);
-    this->pipelineGauss = runtime.createComputePipeline(this->kernelGauss, this->layoutGauss);
-    this->pipelineGaussHorizontal = runtime.createComputePipeline(this->kernelGaussHorizontal, this->layoutGauss);
-    this->pipelineSsim = runtime.createComputePipeline(this->kernelSsim, this->layoutSsim);
-    this->pipelineMssim = runtime.createComputePipeline(this->kernelMssim, this->layoutMssim);
+    this->pipelineLumapack = runtime.createComputePipeline(smLumapack, this->layoutLumapack);
+    this->pipelineGauss = runtime.createComputePipeline(smGauss, this->layoutGauss);
+    this->pipelineGaussHorizontal = runtime.createComputePipeline(smGaussHorizontal, this->layoutGauss);
+    this->pipelineSsim = runtime.createComputePipeline(smSsim, this->layoutSsim);
+    this->pipelineMssim = runtime.createComputePipeline(smMssim, this->layoutMssim);
 
     this->uploadDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});
     this->computeDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});

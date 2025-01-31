@@ -27,7 +27,7 @@ IQM::GPU::VulkanRuntime::VulkanRuntime() {
         .applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
-        .apiVersion = VK_API_VERSION_1_3,
+        .apiVersion = VK_API_VERSION_1_2,
     };
 
     auto layers = getLayers();
@@ -73,6 +73,16 @@ vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const uint32_
     };
 
     vk::raii::ShaderModule module{this->_device, shaderModuleCreateInfo};
+    return module;
+}
+
+vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const vk::raii::Device &device, const std::vector<uint32_t> &spvCode) {
+    vk::ShaderModuleCreateInfo shaderModuleCreateInfo{
+        .codeSize = spvCode.size() * sizeof(uint32_t),
+        .pCode = spvCode.data(),
+    };
+
+    vk::raii::ShaderModule module{device, shaderModuleCreateInfo};
     return module;
 }
 

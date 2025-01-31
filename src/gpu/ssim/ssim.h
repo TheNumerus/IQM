@@ -34,26 +34,21 @@ namespace IQM::GPU {
     private:
         ImageParameters imageParameters;
 
-        vk::raii::ShaderModule kernelSsim = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSsim = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineSsim = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutSsim = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetSsim = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelLumapack = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutLumapack = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineLumapack = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutLumapack = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetLumapack = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelGauss = VK_NULL_HANDLE;
-        vk::raii::ShaderModule kernelGaussHorizontal = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutGauss = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGauss = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGaussHorizontal = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGauss = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelMssim = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutMssim = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineMssim = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutMssim = VK_NULL_HANDLE;
