@@ -12,8 +12,7 @@
 namespace IQM::GPU {
     class FLIPColorPipeline {
     public:
-        explicit FLIPColorPipeline(const VulkanRuntime &runtime);
-        void prepareSpatialFilters(const VulkanRuntime &runtime, int kernel_size, float pixels_per_degree);
+        explicit FLIPColorPipeline(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void prefilter(const VulkanRuntime &runtime, ImageParameters params, float pixels_per_degree);
         void computeErrorMap(const VulkanRuntime &runtime, ImageParameters params);
 
@@ -22,8 +21,6 @@ namespace IQM::GPU {
 
         std::shared_ptr<VulkanImage> imageColorError;
     private:
-        vk::raii::ShaderModule csfPrefilterKernel = VK_NULL_HANDLE;
-        vk::raii::ShaderModule csfPrefilterHorizontalKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout csfPrefilterLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline csfPrefilterPipeline = VK_NULL_HANDLE;
         vk::raii::Pipeline csfPrefilterHorizontalPipeline = VK_NULL_HANDLE;
@@ -31,7 +28,6 @@ namespace IQM::GPU {
         vk::raii::DescriptorSet csfPrefilterDescSet = VK_NULL_HANDLE;
         vk::raii::DescriptorSet csfPrefilterHorizontalDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule spatialDetectKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout spatialDetectLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline spatialDetectPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout spatialDetectDescSetLayout = VK_NULL_HANDLE;

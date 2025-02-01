@@ -9,48 +9,38 @@
 
 #include <algorithm>
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_pack_for_median.inc>
 ;
 
-static uint32_t srcSort[] =
+static std::vector<uint32_t> srcSort =
 #include <lib/multi_radixsort.inc>
 ;
 
-static uint32_t srcSortHistogram[] =
+static std::vector<uint32_t> srcSortHistogram =
 #include <lib/multi_radixsort_histograms.inc>
 ;
 
-static uint32_t srcOut[] =
+static std::vector<uint32_t> srcOut =
 #include <fsim/fsim_noise_power.inc>
 ;
 
-IQM::GPU::FSIMNoisePower::FSIMNoisePower(const VulkanRuntime &runtime) {
-    auto [buf, mem] = runtime.createBuffer(
-        2 * FSIM_ORIENTATIONS * sizeof(float),
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    buf.bindMemory(mem, 0);
-    this->noisePowers = std::move(buf);
-    this->noisePowersMemory = std::move(mem);
+IQM::GPU::FSIMNoisePower::FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smPack = VulkanRuntime::createShaderModule(device, src);
+    const auto smSort = VulkanRuntime::createShaderModule(device, srcSort);
+    const auto smSortHistogram = VulkanRuntime::createShaderModule(device, srcSortHistogram);
+    const auto smNoisePower = VulkanRuntime::createShaderModule(device, srcOut);
 
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
-    this->kernelSort = runtime.createShaderModule(srcSort, sizeof(srcSort));
-    this->kernelSortHistogram = runtime.createShaderModule(srcSortHistogram, sizeof(srcSortHistogram));
-    this->kernelNoisePower = runtime.createShaderModule(srcOut, sizeof(srcOut));
+    this->descSetLayout = VulkanRuntime::createDescLayout(device, {
+        {vk::DescriptorType::eStorageBuffer, 1},
+        {vk::DescriptorType::eStorageBuffer, 1},
+    });
 
-    //custom layout for this pass
-    this->descSetLayout = std::move(runtime.createDescLayout({
-        {vk::DescriptorType::eStorageBuffer, 1},
-        {vk::DescriptorType::eStorageBuffer, 1},
-    }));
-
-    this->descSetLayoutSort = std::move(runtime.createDescLayout({
+    this->descSetLayoutSort = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
-    }));
+    });
 
     const std::vector layouts = {
         *this->descSetLayout,
@@ -62,12 +52,12 @@ IQM::GPU::FSIMNoisePower::FSIMNoisePower(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto createdLayouts = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto createdLayouts = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(createdLayouts[0]);
     this->descSetSortEven = std::move(createdLayouts[1]);
     this->descSetSortOdd = std::move(createdLayouts[2]);
@@ -79,15 +69,15 @@ IQM::GPU::FSIMNoisePower::FSIMNoisePower(const VulkanRuntime &runtime) {
     const auto ranges = VulkanRuntime::createPushConstantRange(2 * sizeof(uint32_t));
     const auto rangesSort = VulkanRuntime::createPushConstantRange(4 * sizeof(uint32_t));
 
-    this->layout = runtime.createPipelineLayout({this->descSetLayout}, {ranges});
-    this->layoutSort = runtime.createPipelineLayout({this->descSetLayoutSort}, {rangesSort});
-    this->layoutSortHistogram = runtime.createPipelineLayout({this->descSetLayout}, {rangesSort});
-    this->layoutNoisePower = runtime.createPipelineLayout({this->descSetLayoutSort}, {ranges});
+    this->layout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, {ranges});
+    this->layoutSort = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutSort}, {rangesSort});
+    this->layoutSortHistogram = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, {rangesSort});
+    this->layoutNoisePower = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutSort}, {ranges});
 
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
-    this->pipelineSort = runtime.createComputePipeline(this->kernelSort, this->layoutSort);
-    this->pipelineSortHistogram = runtime.createComputePipeline(this->kernelSortHistogram, this->layoutSortHistogram);
-    this->pipelineNoisePower = runtime.createComputePipeline(this->kernelNoisePower, this->layoutNoisePower);
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smPack, this->layout);
+    this->pipelineSort = VulkanRuntime::createComputePipeline(device, smSort, this->layoutSort);
+    this->pipelineSortHistogram = VulkanRuntime::createComputePipeline(device, smSortHistogram, this->layoutSortHistogram);
+    this->pipelineNoisePower = VulkanRuntime::createComputePipeline(device, smNoisePower, this->layoutNoisePower);
 }
 
 void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, const vk::raii::Buffer& filterSums, const vk::raii::Buffer& fftBuffer, int width, int height) {
@@ -189,6 +179,15 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
 
 void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, const vk::raii::Buffer& fftBuffer, const vk::raii::Buffer& filterSums, unsigned size, unsigned histBufSize) {
     auto [buf, mem] = runtime.createBuffer(
+        2 * FSIM_ORIENTATIONS * sizeof(float),
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
+    buf.bindMemory(mem, 0);
+    this->noisePowers = std::move(buf);
+    this->noisePowersMemory = std::move(mem);
+
+    auto [bufSort, memSort] = runtime.createBuffer(
         2 * FSIM_ORIENTATIONS * size * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -206,12 +205,12 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
 
-    buf.bindMemory(mem, 0);
+    bufSort.bindMemory(memSort, 0);
     bufTemp.bindMemory(memTemp, 0);
     bufHist.bindMemory(memHist, 0);
 
-    this->noisePowersSortBuf = std::move(buf);
-    this->noisePowersSortMemory = std::move(mem);
+    this->noisePowersSortBuf = std::move(bufSort);
+    this->noisePowersSortMemory = std::move(memSort);
     this->noisePowersTempBuf = std::move(bufTemp);
     this->noisePowersTempMemory = std::move(memTemp);
     this->noisePowersSortHistogramBuf = std::move(bufHist);

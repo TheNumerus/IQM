@@ -1,6 +1,6 @@
 /*
-* Image Quality Metrics
- * Petr Volf - 2024
+ * Image Quality Metrics
+ * Petr Volf - 2025
  */
 
 #ifndef SVD_H
@@ -24,7 +24,7 @@ namespace IQM::GPU {
 
     class SVD {
     public:
-        explicit SVD(const VulkanRuntime &runtime);
+        explicit SVD(const vk::raii::Device &device);
         SVDResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
 
     private:
@@ -35,14 +35,13 @@ namespace IQM::GPU {
         void copyToGpu(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput, size_t histBufInput);
         void copyFromGpu(const VulkanRuntime &runtime, size_t sizeOutput);
 
-        vk::raii::ShaderModule kernelReduce = VK_NULL_HANDLE;
+        vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
+
         vk::raii::PipelineLayout layoutReduce = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineReduce = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutReduce = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetReduce = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelSort = VK_NULL_HANDLE;
-        vk::raii::ShaderModule kernelSortHistogram = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSort = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSortHistogram = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineSort = VK_NULL_HANDLE;
@@ -53,7 +52,6 @@ namespace IQM::GPU {
         vk::raii::DescriptorSet descSetSortHistogramEven = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetSortHistogramOdd = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelSum = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSum = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineSum = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutSum = VK_NULL_HANDLE;

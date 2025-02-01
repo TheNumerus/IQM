@@ -1,35 +1,34 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_filter_combinations.h"
 
 #include <fsim.h>
 
-static uint32_t srcMultPack[] =
+static std::vector<uint32_t> srcMultPack =
 #include <fsim/fsim_filter_combinations.inc>
 ;
 
-static uint32_t srcSum[] =
+static std::vector<uint32_t> srcSum =
 #include <fsim/fsim_filter_noise.inc>
 ;
 
-IQM::GPU::FSIMFilterCombinations::FSIMFilterCombinations(const VulkanRuntime &runtime) {
-    this->multPackKernel = runtime.createShaderModule(srcMultPack, sizeof(srcMultPack));
-    this->sumKernel = runtime.createShaderModule(srcSum, sizeof(srcSum));
+IQM::GPU::FSIMFilterCombinations::FSIMFilterCombinations(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smMultPack = VulkanRuntime::createShaderModule(device, srcMultPack);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcSum);
 
-    //custom layout for this pass
-    this->multPackDescSetLayout = std::move(runtime.createDescLayout({
+    this->multPackDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, FSIM_SCALES},
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
-    }));
+    });
 
-    this->sumDescSetLayout = std::move(runtime.createDescLayout({
+    this->sumDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
-    }));
+    });
 
     const std::vector layouts = {
         *this->multPackDescSetLayout,
@@ -37,23 +36,23 @@ IQM::GPU::FSIMFilterCombinations::FSIMFilterCombinations(const VulkanRuntime &ru
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->multPackDescSet = std::move(sets[0]);
     this->sumDescSet = std::move(sets[1]);
 
     // 3x int - buffer size, index of current execution, bool
     const auto sumRanges = VulkanRuntime::createPushConstantRange(3 * sizeof(int));
 
-    this->multPacklayout = runtime.createPipelineLayout({this->multPackDescSetLayout}, {});
-    this->multPackPipeline = runtime.createComputePipeline(this->multPackKernel, this->multPacklayout);
+    this->multPacklayout = VulkanRuntime::createPipelineLayout(device, {this->multPackDescSetLayout}, {});
+    this->multPackPipeline = VulkanRuntime::createComputePipeline(device, smMultPack, this->multPacklayout);
 
-    this->sumLayout = runtime.createPipelineLayout({this->sumDescSetLayout}, sumRanges);
-    this->sumPipeline = runtime.createComputePipeline(this->sumKernel, this->sumLayout);
+    this->sumLayout = VulkanRuntime::createPipelineLayout(device, {this->sumDescSetLayout}, sumRanges);
+    this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 }
 
 void IQM::GPU::FSIMFilterCombinations::combineFilters(const VulkanRuntime &runtime, const FSIMAngularFilter &angulars, const FSIMLogGabor &logGabor, const vk::raii::Buffer& fftImages, int width, int height) {

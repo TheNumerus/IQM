@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef FSIM_FILTER_COMBINATIONS_H
@@ -29,7 +29,7 @@ namespace IQM::GPU {
      */
     class FSIMFilterCombinations {
     public:
-        explicit FSIMFilterCombinations(const VulkanRuntime &runtime);
+        explicit FSIMFilterCombinations(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void combineFilters(
             const VulkanRuntime &runtime,
             const FSIMAngularFilter &angulars,
@@ -38,7 +38,6 @@ namespace IQM::GPU {
             int width, int height
         );
 
-        vk::raii::ShaderModule multPackKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout multPacklayout = VK_NULL_HANDLE;
         vk::raii::Pipeline multPackPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout multPackDescSetLayout = VK_NULL_HANDLE;
@@ -48,7 +47,6 @@ namespace IQM::GPU {
         vk::raii::DeviceMemory fftMemory = VK_NULL_HANDLE;
 
         // noise sum part
-        vk::raii::ShaderModule sumKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout sumLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline sumPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout sumDescSetLayout = VK_NULL_HANDLE;

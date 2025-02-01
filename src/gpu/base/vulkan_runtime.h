@@ -1,6 +1,6 @@
 /*
-* Image Quality Metrics
- * Petr Volf - 2024
+ * Image Quality Metrics
+ * Petr Volf - 2025
  */
 
 #ifndef VULKANRUNTIME_H
@@ -15,14 +15,26 @@ namespace IQM::GPU {
     class VulkanRuntime {
     public:
         VulkanRuntime();
-        [[nodiscard]] vk::raii::ShaderModule createShaderModule(const uint32_t *spvCode, size_t size) const;
-        [[nodiscard]] static vk::raii::ShaderModule createShaderModule(const vk::raii::Device &device, const std::vector<uint32_t> &spvCode);
-        [[nodiscard]] vk::raii::PipelineLayout createPipelineLayout(const std::vector<vk::DescriptorSetLayout> &layouts, const std::vector<vk::PushConstantRange> &ranges) const;
-        [[nodiscard]] vk::raii::Pipeline createComputePipeline(const vk::raii::ShaderModule &shader, const vk::raii::PipelineLayout &layout) const;
+        [[nodiscard]] static vk::raii::ShaderModule createShaderModule(
+            const vk::raii::Device &device,
+            const std::vector<uint32_t> &spvCode);
+        [[nodiscard]] static vk::raii::PipelineLayout createPipelineLayout(
+            const vk::raii::Device &device,
+            const std::vector<vk::DescriptorSetLayout> &layouts,
+            const std::vector<vk::PushConstantRange> &ranges);
+        [[nodiscard]] static vk::raii::Pipeline createComputePipeline(
+            const vk::raii::Device &device,
+            const vk::raii::ShaderModule &shader,
+            const vk::raii::PipelineLayout &layout);
         [[nodiscard]] std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(unsigned bufferSize, vk::BufferUsageFlags bufferFlags, vk::MemoryPropertyFlags memoryFlags) const;
         [[nodiscard]] VulkanImage createImage(const vk::ImageCreateInfo &imageInfo) const;
-        [[nodiscard]] vk::raii::DescriptorSetLayout createDescLayout(const std::vector<std::pair<vk::DescriptorType, uint32_t>> &stub) const;
-        [[nodiscard]] vk::raii::DescriptorSetLayout createDescLayout(const std::vector<vk::DescriptorSetLayoutBinding> &bindings) const;
+        [[nodiscard]] static vk::raii::DescriptorPool createDescPool(
+            const vk::raii::Device &device,
+            uint32_t maxSets,
+            std::vector<vk::DescriptorPoolSize> poolSizes);
+        [[nodiscard]] static vk::raii::DescriptorSetLayout createDescLayout(
+            const vk::raii::Device &device,
+            const std::vector<std::pair<vk::DescriptorType, uint32_t>> &stub);
         void setImageLayout(const std::shared_ptr<vk::raii::CommandBuffer> &cmd_buf, const vk::raii::Image &image, vk::ImageLayout srcLayout, vk::ImageLayout targetLayout) const;
         static void initImages(const std::shared_ptr<vk::raii::CommandBuffer> &cmd_buf, const std::vector<std::shared_ptr<VulkanImage>> &images);
         void nuke() const;
@@ -60,12 +72,6 @@ namespace IQM::GPU {
         std::shared_ptr<vk::raii::CommandPool> _commandPoolTransfer = VK_NULL_HANDLE;
         std::shared_ptr<vk::raii::CommandBuffer> _cmd_buffer = VK_NULL_HANDLE;
         std::shared_ptr<vk::raii::CommandBuffer> _cmd_bufferTransfer = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout _descLayoutThreeImage = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout _descLayoutTwoImage = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout _descLayoutOneImage = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout _descLayoutBuffer = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout _descLayoutImageBuffer = VK_NULL_HANDLE;
-        vk::raii::DescriptorPool _descPool = VK_NULL_HANDLE;
 
 #ifdef PROFILE
         void createSwapchain(vk::SurfaceKHR surface);

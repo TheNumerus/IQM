@@ -26,7 +26,7 @@ namespace IQM::GPU {
 
     class FLIP {
     public:
-        explicit FLIP(const VulkanRuntime &runtime);
+        explicit FLIP(const vk::raii::Device &device);
         FLIPResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref, const FLIPArguments &args);
 
     private:
@@ -40,36 +40,32 @@ namespace IQM::GPU {
         void endTransferCommandList(const VulkanRuntime &runtime);
         void setUpDescriptors(const VulkanRuntime & runtime);
 
+        vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
+
         FLIPColorPipeline colorPipeline;
 
         ImageParameters imageParameters;
 
-        vk::raii::ShaderModule inputConvertKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout inputConvertLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline inputConvertPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout inputConvertDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet inputConvertDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule featureFilterCreateKernel = VK_NULL_HANDLE;
-        vk::raii::ShaderModule featureFilterNormalizeKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout featureFilterCreateLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline featureFilterCreatePipeline = VK_NULL_HANDLE;
         vk::raii::Pipeline featureFilterNormalizePipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout featureFilterCreateDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet featureFilterCreateDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule featureFilterHorizontalKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout featureFilterHorizontalLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline featureFilterHorizontalPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout featureFilterHorizontalDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet featureFilterHorizontalDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule featureDetectKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout featureDetectLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline featureDetectPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSet featureDetectDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule errorCombineKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout errorCombineLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline errorCombinePipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout errorCombineDescSetLayout = VK_NULL_HANDLE;

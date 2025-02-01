@@ -7,35 +7,34 @@
 
 #include <fsim.h>
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_sum_filter_responses.inc>
 ;
 
-IQM::GPU::FSIMSumFilterResponses::FSIMSumFilterResponses(const VulkanRuntime &runtime) {
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
+IQM::GPU::FSIMSumFilterResponses::FSIMSumFilterResponses(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smSum = VulkanRuntime::createShaderModule(device, src);
 
-    //custom layout for this pass
-    this->descSetLayout = std::move(runtime.createDescLayout({
+    this->descSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
         {vk::DescriptorType::eStorageBuffer, 1},
-    }));
+    });
 
     const std::vector layouts = {
         *this->descSetLayout,
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(sets[0]);
 
-    this->layout = runtime.createPipelineLayout(layouts, {});
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
+    this->layout = VulkanRuntime::createPipelineLayout(device, layouts, {});
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smSum, this->layout);
 
     this->filterResponsesInput = std::vector<std::shared_ptr<VulkanImage>>(FSIM_ORIENTATIONS);
     this->filterResponsesRef = std::vector<std::shared_ptr<VulkanImage>>(FSIM_ORIENTATIONS);

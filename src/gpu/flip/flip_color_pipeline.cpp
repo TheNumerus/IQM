@@ -5,40 +5,32 @@
 
 #include "flip_color_pipeline.h"
 
-static uint32_t srcHorizontal[] =
+static std::vector<uint32_t> srcHorizontal =
 #include <flip/spatial_prefilter_horizontal.inc>
 ;
 
-static uint32_t srcPrefilter[] =
+static std::vector<uint32_t> srcPrefilter =
 #include <flip/spatial_prefilter.inc>
 ;
 
-static uint32_t srcDetect[] =
+static std::vector<uint32_t> srcDetect =
 #include <flip/spatial_detection.inc>
 ;
 
-IQM::GPU::FLIPColorPipeline::FLIPColorPipeline(const VulkanRuntime &runtime) {
-    this->csfPrefilterHorizontalKernel = runtime.createShaderModule(srcHorizontal, sizeof(srcHorizontal));
-    this->csfPrefilterKernel = runtime.createShaderModule(srcPrefilter, sizeof(srcPrefilter));
-    this->spatialDetectKernel = runtime.createShaderModule(srcDetect, sizeof(srcDetect));
+IQM::GPU::FLIPColorPipeline::FLIPColorPipeline(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smCsfPrefilterHorizontal = VulkanRuntime::createShaderModule(device, srcHorizontal);
+    const auto smCsfPrefilter = VulkanRuntime::createShaderModule(device, srcPrefilter);
+    const auto smSpatialDetect = VulkanRuntime::createShaderModule(device, srcDetect);
 
-    this->csfPrefilterDescSetLayout = runtime.createDescLayout({
+    this->csfPrefilterDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 2},
     });
 
-    this->spatialDetectDescSetLayout = runtime.createDescLayout({
+    this->spatialDetectDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 1},
     });
-
-    const std::vector descLayoutPrefilter = {
-        *this->csfPrefilterDescSetLayout,
-    };
-
-    const std::vector descLayoutDetect = {
-        *this->spatialDetectDescSetLayout,
-    };
 
     const std::vector allDescLayouts = {
         *this->csfPrefilterDescSetLayout,
@@ -47,24 +39,24 @@ IQM::GPU::FLIPColorPipeline::FLIPColorPipeline(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(allDescLayouts.size()),
         .pSetLayouts = allDescLayouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->csfPrefilterHorizontalDescSet = std::move(sets[0]);
     this->csfPrefilterDescSet = std::move(sets[1]);
     this->spatialDetectDescSet = std::move(sets[2]);
 
     const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(float));
 
-    this->csfPrefilterLayout = runtime.createPipelineLayout(descLayoutPrefilter, ranges);
-    this->csfPrefilterHorizontalPipeline = runtime.createComputePipeline(this->csfPrefilterHorizontalKernel, this->csfPrefilterLayout);
-    this->csfPrefilterPipeline = runtime.createComputePipeline(this->csfPrefilterKernel, this->csfPrefilterLayout);
+    this->csfPrefilterLayout = VulkanRuntime::createPipelineLayout(device, {this->csfPrefilterDescSetLayout}, ranges);
+    this->csfPrefilterHorizontalPipeline = VulkanRuntime::createComputePipeline(device, smCsfPrefilterHorizontal, this->csfPrefilterLayout);
+    this->csfPrefilterPipeline = VulkanRuntime::createComputePipeline(device, smCsfPrefilter, this->csfPrefilterLayout);
 
-    this->spatialDetectLayout = runtime.createPipelineLayout(descLayoutDetect, {});
-    this->spatialDetectPipeline = runtime.createComputePipeline(this->spatialDetectKernel, this->spatialDetectLayout);
+    this->spatialDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->spatialDetectDescSetLayout}, {});
+    this->spatialDetectPipeline = VulkanRuntime::createComputePipeline(device, smSpatialDetect, this->spatialDetectLayout);
 }
 
 void IQM::GPU::FLIPColorPipeline::prefilter(const VulkanRuntime &runtime, ImageParameters params, float pixels_per_degree) {

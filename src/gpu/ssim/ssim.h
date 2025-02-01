@@ -24,7 +24,7 @@ namespace IQM::GPU {
 
     class SSIM {
     public:
-        explicit SSIM(const VulkanRuntime &runtime);
+        explicit SSIM(const vk::raii::Device &device);
         SSIMResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
 
         int kernelSize = 11;
@@ -33,6 +33,8 @@ namespace IQM::GPU {
         float sigma = 1.5;
     private:
         ImageParameters imageParameters;
+
+        vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout layoutSsim = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineSsim = VK_NULL_HANDLE;

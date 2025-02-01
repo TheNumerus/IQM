@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef FSIM_ESTIMATE_ENERGY_H
@@ -14,16 +14,14 @@ namespace IQM::GPU {
      */
     class FSIMEstimateEnergy {
     public:
-        explicit FSIMEstimateEnergy(const VulkanRuntime &runtime);
+        explicit FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void estimateEnergy(const VulkanRuntime &runtime, const vk::raii::Buffer& fftBuf, int width, int height);
 
-        vk::raii::ShaderModule estimateEnergyKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout estimateEnergyLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline estimateEnergyPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout estimateEnergyDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet estimateEnergyDescSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule sumKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout sumLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline sumPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout sumDescSetLayout = VK_NULL_HANDLE;

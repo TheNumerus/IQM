@@ -6,74 +6,64 @@
 #include "flip.h"
 #include "viridis.h"
 
-static uint32_t srcInputConvert[] =
+static std::vector<uint32_t> srcInputConvert =
 #include <flip/srgb_to_ycxcz.inc>
 ;
 
-static uint32_t srcFeatureFilterCreate[] =
+static std::vector<uint32_t> srcFeatureFilterCreate =
 #include <flip/feature_filter.inc>
 ;
 
-static uint32_t srcFeatureFilterNormalize[] =
+static std::vector<uint32_t> srcFeatureFilterNormalize =
 #include <flip/feature_filter_normalize.inc>
 ;
 
-static uint32_t srcFeatureFilterHorizontal[] =
+static std::vector<uint32_t> srcFeatureFilterHorizontal =
 #include <flip/feature_filter_horizontal.inc>
 ;
 
-static uint32_t srcFeatureDetect[] =
+static std::vector<uint32_t> srcFeatureDetect =
 #include <flip/feature_detection.inc>
 ;
 
-static uint32_t srcErrCombine[] =
+static std::vector<uint32_t> srcErrCombine =
 #include <flip/combine_error_maps.inc>
 ;
 
-IQM::GPU::FLIP::FLIP(const VulkanRuntime &runtime): colorPipeline(runtime) {
-    this->inputConvertKernel = runtime.createShaderModule(srcInputConvert, sizeof(srcInputConvert));
-    this->featureFilterCreateKernel = runtime.createShaderModule(srcFeatureFilterCreate, sizeof(srcFeatureFilterCreate));
-    this->featureFilterNormalizeKernel = runtime.createShaderModule(srcFeatureFilterNormalize, sizeof(srcFeatureFilterNormalize));
-    this->featureFilterHorizontalKernel = runtime.createShaderModule(srcFeatureFilterHorizontal, sizeof(srcFeatureFilterHorizontal));
-    this->featureDetectKernel = runtime.createShaderModule(srcFeatureDetect, sizeof(srcFeatureDetect));
-    this->errorCombineKernel = runtime.createShaderModule(srcErrCombine, sizeof(srcErrCombine));
+IQM::GPU::FLIP::FLIP(const vk::raii::Device &device):
+descPool(VulkanRuntime::createDescPool(device, 64, {
+    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 128},
+    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 32}
+})),
+colorPipeline(device, descPool)
+{
+    const auto smInputConvert = VulkanRuntime::createShaderModule(device, srcInputConvert);
+    const auto smFeatureFilterCreate = VulkanRuntime::createShaderModule(device, srcFeatureFilterCreate);
+    const auto smFeatureFilterNormalize = VulkanRuntime::createShaderModule(device, srcFeatureFilterNormalize);
+    const auto smFeatureFilterHorizontal = VulkanRuntime::createShaderModule(device, srcFeatureFilterHorizontal);
+    const auto smFeatureDetect = VulkanRuntime::createShaderModule(device, srcFeatureDetect);
+    const auto smErrorCombine = VulkanRuntime::createShaderModule(device, srcErrCombine);
 
-    this->inputConvertDescSetLayout = runtime.createDescLayout({
+    this->inputConvertDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 2},
     });
 
-    this->featureFilterCreateDescSetLayout = runtime.createDescLayout({
+    this->featureFilterCreateDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 1},
     });
 
-    this->featureFilterHorizontalDescSetLayout = runtime.createDescLayout({
+    this->featureFilterHorizontalDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 1},
     });
 
-    this->errorCombineDescSetLayout = runtime.createDescLayout({
+    this->errorCombineDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 1},
         {vk::DescriptorType::eStorageImage, 1},
     });
-
-    const std::vector descLayouts = {
-        *this->inputConvertDescSetLayout,
-    };
-
-    const std::vector descLayoutsFeatureFilters = {
-        *this->featureFilterCreateDescSetLayout,
-    };
-
-    const std::vector descLayoutFilterHorizontal = {
-        *this->featureFilterHorizontalDescSetLayout,
-    };
-
-    const std::vector descLayoutErrorCombine = {
-        *this->errorCombineDescSetLayout,
-    };
 
     const std::vector allDescLayouts = {
         *this->inputConvertDescSetLayout,
@@ -84,38 +74,38 @@ IQM::GPU::FLIP::FLIP(const VulkanRuntime &runtime): colorPipeline(runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = this->descPool,
         .descriptorSetCount = static_cast<uint32_t>(allDescLayouts.size()),
         .pSetLayouts = allDescLayouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->inputConvertDescSet = std::move(sets[0]);
     this->featureFilterCreateDescSet = std::move(sets[1]);
     this->featureFilterHorizontalDescSet = std::move(sets[2]);
     this->featureDetectDescSet = std::move(sets[3]);
     this->errorCombineDescSet = std::move(sets[4]);
 
-    this->inputConvertLayout = runtime.createPipelineLayout(descLayouts, {});
-    this->inputConvertPipeline = runtime.createComputePipeline(this->inputConvertKernel, this->inputConvertLayout);
+    this->inputConvertLayout = VulkanRuntime::createPipelineLayout(device, {this->inputConvertDescSetLayout}, {});
+    this->inputConvertPipeline = VulkanRuntime::createComputePipeline(device, smInputConvert, this->inputConvertLayout);
 
     const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(float));
-    this->featureFilterCreateLayout = runtime.createPipelineLayout(descLayoutsFeatureFilters, ranges);
-    this->featureFilterCreatePipeline = runtime.createComputePipeline(this->featureFilterCreateKernel, this->featureFilterCreateLayout);
-    this->featureFilterNormalizePipeline = runtime.createComputePipeline(this->featureFilterNormalizeKernel, this->featureFilterCreateLayout);
+    this->featureFilterCreateLayout = VulkanRuntime::createPipelineLayout(device, {this->featureFilterCreateDescSetLayout}, ranges);
+    this->featureFilterCreatePipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterCreate, this->featureFilterCreateLayout);
+    this->featureFilterNormalizePipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterNormalize, this->featureFilterCreateLayout);
 
-    this->featureFilterHorizontalLayout = runtime.createPipelineLayout(descLayoutFilterHorizontal, {});
-    this->featureFilterHorizontalPipeline = runtime.createComputePipeline(this->featureFilterHorizontalKernel, this->featureFilterHorizontalLayout);
+    this->featureFilterHorizontalLayout = VulkanRuntime::createPipelineLayout(device, {this->featureFilterHorizontalDescSetLayout}, {});
+    this->featureFilterHorizontalPipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterHorizontal, this->featureFilterHorizontalLayout);
 
-    this->featureDetectLayout = runtime.createPipelineLayout(descLayoutErrorCombine, {});
-    this->featureDetectPipeline = runtime.createComputePipeline(this->featureDetectKernel, this->featureDetectLayout);
+    this->featureDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->errorCombineDescSetLayout}, {});
+    this->featureDetectPipeline = VulkanRuntime::createComputePipeline(device, smFeatureDetect, this->featureDetectLayout);
 
-    this->errorCombineLayout = runtime.createPipelineLayout(descLayoutErrorCombine, {});
-    this->errorCombinePipeline = runtime.createComputePipeline(this->errorCombineKernel, this->errorCombineLayout);
+    this->errorCombineLayout = VulkanRuntime::createPipelineLayout(device, {this->errorCombineDescSetLayout}, {});
+    this->errorCombinePipeline = VulkanRuntime::createComputePipeline(device, smErrorCombine, this->errorCombineLayout);
 
-    this->uploadDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});
-    this->computeDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});
-    this->transferFence = runtime._device.createFence(vk::FenceCreateInfo{});
+    this->uploadDone = device.createSemaphore(vk::SemaphoreCreateInfo{});
+    this->computeDone = device.createSemaphore(vk::SemaphoreCreateInfo{});
+    this->transferFence = device.createFence(vk::FenceCreateInfo{});
 }
 
 IQM::GPU::FLIPResult IQM::GPU::FLIP::computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref, const FLIPArguments &args) {

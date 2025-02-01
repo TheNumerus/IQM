@@ -11,10 +11,9 @@
 namespace IQM::GPU {
     class FSIMAngularFilter {
     public:
-        explicit FSIMAngularFilter(const VulkanRuntime &runtime);
+        explicit FSIMAngularFilter(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void constructFilter(const VulkanRuntime &runtime, int width, int height);
 
-        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;

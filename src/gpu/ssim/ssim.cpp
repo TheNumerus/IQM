@@ -25,24 +25,29 @@ static std::vector<uint32_t> srcMssim =
 #include <ssim/mssim_sum.inc>
 ;
 
-IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
-    const auto smSsim = VulkanRuntime::createShaderModule(runtime._device, src);
-    const auto smLumapack = VulkanRuntime::createShaderModule(runtime._device,srcLumapack);
-    const auto smGaussHorizontal = VulkanRuntime::createShaderModule(runtime._device, srcGaussHorizontal);
-    const auto smGauss = VulkanRuntime::createShaderModule(runtime._device, srcGauss);
-    const auto smMssim = VulkanRuntime::createShaderModule(runtime._device, srcMssim);
+IQM::GPU::SSIM::SSIM(const vk::raii::Device &device) {
+    const auto smSsim = VulkanRuntime::createShaderModule(device, src);
+    const auto smLumapack = VulkanRuntime::createShaderModule(device,srcLumapack);
+    const auto smGaussHorizontal = VulkanRuntime::createShaderModule(device, srcGaussHorizontal);
+    const auto smGauss = VulkanRuntime::createShaderModule(device, srcGauss);
+    const auto smMssim = VulkanRuntime::createShaderModule(device, srcMssim);
 
-    this->descSetLayoutLumapack = runtime.createDescLayout({
+    this->descPool = VulkanRuntime::createDescPool(device, 4, {
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 16},
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 16}
+    });
+
+    this->descSetLayoutLumapack = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 5},
     });
 
-    this->descSetLayoutSsim = runtime.createDescLayout({
+    this->descSetLayoutSsim = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 5},
         {vk::DescriptorType::eStorageImage, 1},
     });
 
-    this->descSetLayoutMssim = runtime.createDescLayout({
+    this->descSetLayoutMssim = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
     });
 
@@ -54,12 +59,12 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = this->descPool,
         .descriptorSetCount = static_cast<uint32_t>(allocateLayouts.size()),
         .pSetLayouts = allocateLayouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSetLumapack = std::move(sets[0]);
     this->descSetGauss = std::move(sets[1]);
     this->descSetSsim = std::move(sets[2]);
@@ -76,20 +81,20 @@ IQM::GPU::SSIM::SSIM(const VulkanRuntime &runtime) {
     // 1x int - data size
     const auto rangeMssim = VulkanRuntime::createPushConstantRange( sizeof(int));
 
-    this->layoutLumapack = runtime.createPipelineLayout({*this->descSetLayoutLumapack}, {});
-    this->layoutGauss = runtime.createPipelineLayout({*this->descSetLayoutSsim}, rangesGauss);
-    this->layoutSsim = runtime.createPipelineLayout({*this->descSetLayoutSsim}, ranges);
-    this->layoutMssim = runtime.createPipelineLayout({*this->descSetLayoutMssim}, rangeMssim);
+    this->layoutLumapack = VulkanRuntime::createPipelineLayout(device, {*this->descSetLayoutLumapack}, {});
+    this->layoutGauss = VulkanRuntime::createPipelineLayout(device, {*this->descSetLayoutSsim}, rangesGauss);
+    this->layoutSsim = VulkanRuntime::createPipelineLayout(device, {*this->descSetLayoutSsim}, ranges);
+    this->layoutMssim = VulkanRuntime::createPipelineLayout(device, {*this->descSetLayoutMssim}, rangeMssim);
 
-    this->pipelineLumapack = runtime.createComputePipeline(smLumapack, this->layoutLumapack);
-    this->pipelineGauss = runtime.createComputePipeline(smGauss, this->layoutGauss);
-    this->pipelineGaussHorizontal = runtime.createComputePipeline(smGaussHorizontal, this->layoutGauss);
-    this->pipelineSsim = runtime.createComputePipeline(smSsim, this->layoutSsim);
-    this->pipelineMssim = runtime.createComputePipeline(smMssim, this->layoutMssim);
+    this->pipelineLumapack = VulkanRuntime::createComputePipeline(device, smLumapack, this->layoutLumapack);
+    this->pipelineGauss = VulkanRuntime::createComputePipeline(device, smGauss, this->layoutGauss);
+    this->pipelineGaussHorizontal = VulkanRuntime::createComputePipeline(device, smGaussHorizontal, this->layoutGauss);
+    this->pipelineSsim = VulkanRuntime::createComputePipeline(device, smSsim, this->layoutSsim);
+    this->pipelineMssim = VulkanRuntime::createComputePipeline(device, smMssim, this->layoutMssim);
 
-    this->uploadDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});
-    this->computeDone = runtime._device.createSemaphore(vk::SemaphoreCreateInfo{});
-    this->transferFence = runtime._device.createFence(vk::FenceCreateInfo{});
+    this->uploadDone = device.createSemaphore(vk::SemaphoreCreateInfo{});
+    this->computeDone = device.createSemaphore(vk::SemaphoreCreateInfo{});
+    this->transferFence = device.createFence(vk::FenceCreateInfo{});
 
     this->imagesBlurred = std::vector<std::shared_ptr<VulkanImage>>(5, VK_NULL_HANDLE);
 }

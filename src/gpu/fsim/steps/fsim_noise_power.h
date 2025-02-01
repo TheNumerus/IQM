@@ -11,7 +11,7 @@
 namespace IQM::GPU {
     class FSIMNoisePower {
     public:
-        explicit FSIMNoisePower(const VulkanRuntime &runtime);
+        explicit FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void computeNoisePower(const VulkanRuntime &runtime, const vk::raii::Buffer &filterSums, const vk::raii::Buffer &fftBuffer, int width, int height);
 
         vk::raii::DeviceMemory noisePowersMemory = VK_NULL_HANDLE;
@@ -24,14 +24,11 @@ namespace IQM::GPU {
         vk::raii::DeviceMemory noisePowersSortHistogramMemory = VK_NULL_HANDLE;
         vk::raii::Buffer noisePowersSortHistogramBuf = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelSort = VK_NULL_HANDLE;
-        vk::raii::ShaderModule kernelSortHistogram = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSort = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutSortHistogram = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineSort = VK_NULL_HANDLE;
@@ -42,7 +39,6 @@ namespace IQM::GPU {
         vk::raii::DescriptorSet descSetSortHistogramEven = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetSortHistogramOdd = VK_NULL_HANDLE;
 
-        vk::raii::ShaderModule kernelNoisePower = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutNoisePower = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineNoisePower = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutNoisePower = VK_NULL_HANDLE;

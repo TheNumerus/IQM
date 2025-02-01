@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef FSIM_FINAL_MULTIPLY_H
@@ -11,7 +11,7 @@
 namespace IQM::GPU {
     class FSIMFinalMultiply {
     public:
-        explicit FSIMFinalMultiply(const VulkanRuntime& runtime);
+        explicit FSIMFinalMultiply(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         std::pair<float, float> computeMetrics(
             const VulkanRuntime &runtime,
             const std::vector<std::shared_ptr<VulkanImage>> &inputImgs,
@@ -21,7 +21,6 @@ namespace IQM::GPU {
             int height
         );
 
-        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
@@ -29,7 +28,6 @@ namespace IQM::GPU {
 
         std::vector<std::shared_ptr<VulkanImage>> images;
 
-        vk::raii::ShaderModule sumKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout sumLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline sumPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout sumDescSetLayout = VK_NULL_HANDLE;

@@ -14,10 +14,9 @@ namespace IQM::GPU {
      */
     class FSIMSumFilterResponses {
     public:
-        explicit FSIMSumFilterResponses(const VulkanRuntime &runtime);
+        explicit FSIMSumFilterResponses(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void computeSums(const VulkanRuntime &runtime, const vk::raii::Buffer& filters, int width, int height);
 
-        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;

@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include <iostream>
@@ -81,7 +81,7 @@ void ssim(const IQM::Args& args) {
         std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
     }
 
-    IQM::GPU::SSIM ssim(vulkan);
+    IQM::GPU::SSIM ssim(vulkan._device);
 
     // starts only in debug, needs to init after vulkan
     initRenderDoc();
@@ -142,7 +142,7 @@ void svd(const IQM::Args& args) {
     }
 
     const IQM::GPU::VulkanRuntime vulkan;
-    IQM::GPU::SVD svd(vulkan);
+    IQM::GPU::SVD svd(vulkan._device);
 
     if (args.verbose) {
         std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
@@ -187,7 +187,7 @@ void fsim(const IQM::Args& args) {
     }
 
     const IQM::GPU::VulkanRuntime vulkan;
-    IQM::GPU::FSIM fsim(vulkan);
+    IQM::GPU::FSIM fsim(vulkan._device);
 
     if (args.verbose) {
         std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
@@ -223,7 +223,7 @@ void flip(const IQM::Args& args) {
     }
 
     const IQM::GPU::VulkanRuntime vulkan;
-    IQM::GPU::FLIP flip(vulkan);
+    IQM::GPU::FLIP flip(vulkan._device);
 
     auto flip_args = IQM::GPU::FLIPArguments{};
     if (args.options.contains("FLIP_WIDTH")) {

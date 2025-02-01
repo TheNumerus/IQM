@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include <iostream>
@@ -110,7 +110,7 @@ void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime &vulkan) {
         throw std::runtime_error("Compared images must have the same size");
     }
 
-    IQM::GPU::SVD svd(vulkan);
+    IQM::GPU::SVD svd(vulkan._device);
 
     if (args.verbose) {
         std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
@@ -248,9 +248,9 @@ int main(int argc, const char **argv) {
     vulkan.createSwapchain(surface);
     glfwShowWindow(window);
 
-    IQM::GPU::SSIM ssimMethod(vulkan);
-    IQM::GPU::FSIM fsimMethod(vulkan);
-    IQM::GPU::FLIP flipMethod(vulkan);
+    IQM::GPU::SSIM ssimMethod(vulkan._device);
+    IQM::GPU::FSIM fsimMethod(vulkan._device);
+    IQM::GPU::FLIP flipMethod(vulkan._device);
 
     while (!glfwWindowShouldClose(window)) {
         try {

@@ -8,57 +8,63 @@
 #include "fft_planner.h"
 #include "../img_params.h"
 
-static uint32_t srcDownscale[] =
+static std::vector<uint32_t> srcDownscale =
 #include <fsim/fsim_downsample.inc>
 ;
 
-static uint32_t srcGradient[] =
+static std::vector<uint32_t> srcGradient =
 #include <fsim/fsim_gradientmap.inc>
 ;
 
-static uint32_t srcExtractLuma[] =
+static std::vector<uint32_t> srcExtractLuma =
 #include <fsim/fsim_extractluma.inc>
 ;
 
-IQM::GPU::FSIM::FSIM(const VulkanRuntime &runtime):
-lowpassFilter(runtime),
-logGaborFilter(runtime),
-angularFilter(runtime),
-combinations(runtime),
-sumFilterResponses(runtime),
-noise_power(runtime),
-estimateEnergy(runtime),
-phaseCongruency(runtime),
-final_multiply(runtime)
+IQM::GPU::FSIM::FSIM(const vk::raii::Device &device):
+descPool(VulkanRuntime::createDescPool(device, 64, {
+    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 128},
+    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 32}
+})),
+lowpassFilter(device, descPool),
+logGaborFilter(device, descPool),
+angularFilter(device, descPool),
+combinations(device, descPool),
+sumFilterResponses(device, descPool),
+noise_power(device, descPool),
+estimateEnergy(device, descPool),
+phaseCongruency(device, descPool),
+final_multiply(device, descPool)
 {
-    this->downscaleKernel = runtime.createShaderModule(srcDownscale, sizeof(srcDownscale));
-    this->kernelGradientMap = runtime.createShaderModule(srcGradient, sizeof(srcGradient));
-    this->kernelExtractLuma = runtime.createShaderModule(srcExtractLuma, sizeof(srcExtractLuma));
+    const auto smDownscale = VulkanRuntime::createShaderModule(device, srcDownscale);
+    const auto smGradientMap = VulkanRuntime::createShaderModule(device, srcGradient);
+    const auto smExtractLuma = VulkanRuntime::createShaderModule(device, srcExtractLuma);
 
-    const std::vector layout_2 = {
-        *runtime._descLayoutTwoImage,
-    };
+    this->descSetLayoutImageOp = VulkanRuntime::createDescLayout(device, {
+        {vk::DescriptorType::eStorageImage, 1},
+        {vk::DescriptorType::eStorageImage, 1},
+    });
 
-    const std::vector layout_imbuf = {
-        *runtime._descLayoutImageBuffer,
-    };
+    this->descSetLayoutImBufOp = VulkanRuntime::createDescLayout(device, {
+        {vk::DescriptorType::eStorageImage, 1},
+        {vk::DescriptorType::eStorageBuffer, 1},
+    });
 
     const std::vector allLayouts = {
-        *runtime._descLayoutTwoImage,
-        *runtime._descLayoutTwoImage,
-        *runtime._descLayoutTwoImage,
-        *runtime._descLayoutTwoImage,
-        *runtime._descLayoutImageBuffer,
-        *runtime._descLayoutImageBuffer,
+        *this->descSetLayoutImageOp,
+        *this->descSetLayoutImageOp,
+        *this->descSetLayoutImageOp,
+        *this->descSetLayoutImageOp,
+        *this->descSetLayoutImBufOp,
+        *this->descSetLayoutImBufOp,
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = this->descPool,
         .descriptorSetCount = static_cast<uint32_t>(allLayouts.size()),
         .pSetLayouts = allLayouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSetDownscaleIn = std::move(sets[0]);
     this->descSetDownscaleRef = std::move(sets[1]);
     this->descSetGradientMapIn = std::move(sets[2]);
@@ -69,14 +75,14 @@ final_multiply(runtime)
     // 1x int - kernel size
     const auto downsampleRanges = VulkanRuntime::createPushConstantRange(sizeof(int));
 
-    this->layoutDownscale = runtime.createPipelineLayout(layout_2, downsampleRanges);
-    this->pipelineDownscale = runtime.createComputePipeline(this->downscaleKernel, this->layoutDownscale);
+    this->layoutDownscale = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutImageOp}, downsampleRanges);
+    this->pipelineDownscale = VulkanRuntime::createComputePipeline(device, smDownscale, this->layoutDownscale);
 
-    this->layoutGradientMap = runtime.createPipelineLayout(layout_2, {});
-    this->pipelineGradientMap = runtime.createComputePipeline(this->kernelGradientMap, this->layoutGradientMap);
+    this->layoutGradientMap = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutImageOp}, {});
+    this->pipelineGradientMap = VulkanRuntime::createComputePipeline(device, smGradientMap, this->layoutGradientMap);
 
-    this->layoutExtractLuma = runtime.createPipelineLayout(layout_imbuf, {});
-    this->pipelineExtractLuma = runtime.createComputePipeline(this->kernelExtractLuma, this->layoutExtractLuma);
+    this->layoutExtractLuma = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutImBufOp}, {});
+    this->pipelineExtractLuma = VulkanRuntime::createComputePipeline(device, smExtractLuma, this->layoutExtractLuma);
 }
 
 IQM::GPU::FSIMResult IQM::GPU::FSIM::computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref) {

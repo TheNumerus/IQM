@@ -1,6 +1,6 @@
 /*
-* Image Quality Metrics
- * Petr Volf - 2024
+ * Image Quality Metrics
+ * Petr Volf - 2025
  */
 
 #include "vulkan_runtime.h"
@@ -63,17 +63,6 @@ IQM::GPU::VulkanRuntime::VulkanRuntime() {
     this->_instance = vk::raii::Instance{this->_context, instanceCreateInfo};
 
     this->initQueues();
-    this->initDescriptors();
-}
-
-vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const uint32_t* spvCode, size_t size) const {
-    vk::ShaderModuleCreateInfo shaderModuleCreateInfo{
-        .codeSize = size,
-        .pCode = spvCode,
-    };
-
-    vk::raii::ShaderModule module{this->_device, shaderModuleCreateInfo};
-    return module;
 }
 
 vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const vk::raii::Device &device, const std::vector<uint32_t> &spvCode) {
@@ -86,7 +75,10 @@ vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const vk::rai
     return module;
 }
 
-vk::raii::PipelineLayout IQM::GPU::VulkanRuntime::createPipelineLayout(const std::vector<vk::DescriptorSetLayout> &layouts, const std::vector<vk::PushConstantRange> &ranges) const {
+vk::raii::PipelineLayout IQM::GPU::VulkanRuntime::createPipelineLayout(
+    const vk::raii::Device &device,
+    const std::vector<vk::DescriptorSetLayout> &layouts,
+    const std::vector<vk::PushConstantRange> &ranges) {
     vk::PipelineLayoutCreateInfo layoutInfo = {
         .flags = {},
         .setLayoutCount = static_cast<uint32_t>(layouts.size()),
@@ -95,10 +87,13 @@ vk::raii::PipelineLayout IQM::GPU::VulkanRuntime::createPipelineLayout(const std
         .pPushConstantRanges = ranges.data(),
     };
 
-    return vk::raii::PipelineLayout{this->_device, layoutInfo};
+    return vk::raii::PipelineLayout{device, layoutInfo};
 }
 
-vk::raii::Pipeline IQM::GPU::VulkanRuntime::createComputePipeline(const vk::raii::ShaderModule &shader, const vk::raii::PipelineLayout &layout) const {
+vk::raii::Pipeline IQM::GPU::VulkanRuntime::createComputePipeline(
+    const vk::raii::Device &device,
+    const vk::raii::ShaderModule &shader,
+    const vk::raii::PipelineLayout &layout) {
     vk::ComputePipelineCreateInfo computePipelineCreateInfo{
         .stage = vk::PipelineShaderStageCreateInfo {
             .stage = vk::ShaderStageFlagBits::eCompute,
@@ -109,7 +104,7 @@ vk::raii::Pipeline IQM::GPU::VulkanRuntime::createComputePipeline(const vk::raii
         .layout = layout
     };
 
-    return std::move(vk::raii::Pipelines{this->_device, nullptr, computePipelineCreateInfo}.front());
+    return std::move(vk::raii::Pipelines{device, nullptr, computePipelineCreateInfo}.front());
 }
 
 uint32_t findMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask) {
@@ -190,6 +185,21 @@ IQM::GPU::VulkanImage IQM::GPU::VulkanRuntime::createImage(const vk::ImageCreate
         .image = std::move(image),
         .imageView = vk::raii::ImageView{this->_device, imageViewCreateInfo},
     };
+}
+
+vk::raii::DescriptorPool IQM::GPU::VulkanRuntime::createDescPool(
+    const vk::raii::Device &device,
+    uint32_t maxSets,
+    std::vector<vk::DescriptorPoolSize> poolSizes)
+{
+    vk::DescriptorPoolCreateInfo dsCreateInfo{
+        .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+        .maxSets = maxSets,
+        .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+        .pPoolSizes = poolSizes.data()
+    };
+
+    return vk::raii::DescriptorPool{device, dsCreateInfo};
 }
 
 void IQM::GPU::VulkanRuntime::setImageLayout(const std::shared_ptr<vk::raii::CommandBuffer> &cmd_buf, const vk::raii::Image& image, vk::ImageLayout srcLayout, vk::ImageLayout targetLayout) const {
@@ -514,41 +524,6 @@ void IQM::GPU::VulkanRuntime::initQueues() {
     }
 }
 
-void IQM::GPU::VulkanRuntime::initDescriptors() {
-    this->_descLayoutTwoImage = std::move(this->createDescLayout({
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageImage, 1},
-    }));
-
-    this->_descLayoutOneImage = std::move(this->createDescLayout({
-        {vk::DescriptorType::eStorageImage, 1},
-    }));
-
-    this->_descLayoutBuffer = std::move(this->createDescLayout({
-        {vk::DescriptorType::eStorageBuffer, 1},
-        {vk::DescriptorType::eStorageBuffer, 1},
-    }));
-
-    this->_descLayoutImageBuffer = std::move(this->createDescLayout({
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageBuffer, 1},
-    }));
-
-    std::vector poolSizes = {
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 128},
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 32}
-    };
-
-    vk::DescriptorPoolCreateInfo dsCreateInfo{
-        .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-        .maxSets = 64,
-        .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
-        .pPoolSizes = poolSizes.data()
-    };
-
-    this->_descPool = std::move(vk::raii::DescriptorPool{this->_device, dsCreateInfo});
-}
-
 std::vector<const char *> IQM::GPU::VulkanRuntime::getLayers() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -566,7 +541,7 @@ std::vector<const char *> IQM::GPU::VulkanRuntime::getLayers() {
     return {};
 }
 
-vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const std::vector<std::pair<vk::DescriptorType, uint32_t>> &stub) const {
+vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const vk::raii::Device &device, const std::vector<std::pair<vk::DescriptorType, uint32_t>> &stub) {
     auto bindings = std::vector<vk::DescriptorSetLayoutBinding>(stub.size());
 
     for (unsigned i = 0; i < stub.size(); i++) {
@@ -585,16 +560,7 @@ vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const st
         .pBindings = bindings.data()
     };
 
-    return vk::raii::DescriptorSetLayout {this->_device, info};
-}
-
-vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const std::vector<vk::DescriptorSetLayoutBinding> &bindings) const {
-    auto info = vk::DescriptorSetLayoutCreateInfo {
-        .bindingCount = static_cast<uint32_t>(bindings.size()),
-        .pBindings = bindings.data()
-    };
-
-    return vk::raii::DescriptorSetLayout {this->_device, info};
+    return vk::raii::DescriptorSetLayout {device, info};
 }
 
 std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<std::shared_ptr<VulkanImage>> &images) {

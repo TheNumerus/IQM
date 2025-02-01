@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef FSIM_LOG_GABOR_H
@@ -11,10 +11,9 @@
 namespace IQM::GPU {
     class FSIMLogGabor {
     public:
-        explicit FSIMLogGabor(const VulkanRuntime &runtime);
+        explicit FSIMLogGabor(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void constructFilter(const VulkanRuntime &runtime, const std::shared_ptr<VulkanImage> &lowpass, int width, int height);
 
-        vk::raii::ShaderModule kernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;

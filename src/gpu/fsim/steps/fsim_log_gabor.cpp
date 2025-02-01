@@ -1,20 +1,20 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_log_gabor.h"
 
 #include <fsim.h>
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_log_gabor.inc>
 ;
 
-IQM::GPU::FSIMLogGabor::FSIMLogGabor(const VulkanRuntime &runtime) {
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
+IQM::GPU::FSIMLogGabor::FSIMLogGabor(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smLogGabor = VulkanRuntime::createShaderModule(device, src);
 
-    this->descSetLayout = std::move(runtime.createDescLayout({
+    this->descSetLayout = std::move(VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 1},
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
     }));
@@ -24,15 +24,15 @@ IQM::GPU::FSIMLogGabor::FSIMLogGabor(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layout.size()),
         .pSetLayouts = layout.data()
     };
 
-    this->descSet = std::move(vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo}.front());
+    this->descSet = std::move(vk::raii::DescriptorSets{device, descriptorSetAllocateInfo}.front());
 
-    this->layout = runtime.createPipelineLayout(layout, {});
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
+    this->layout = VulkanRuntime::createPipelineLayout(device, layout, {});
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smLogGabor, this->layout);
 
     this->imageLogGaborFilters = std::vector<std::shared_ptr<VulkanImage>>(FSIM_SCALES);
 }

@@ -1,37 +1,37 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_angular_filter.h"
 
 #include <fsim.h>
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_angular.inc>
 ;
 
-IQM::GPU::FSIMAngularFilter::FSIMAngularFilter(const VulkanRuntime &runtime) {
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
+IQM::GPU::FSIMAngularFilter::FSIMAngularFilter(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smAngular = VulkanRuntime::createShaderModule(device, src);
 
-    this->descSetLayout = std::move(runtime.createDescLayout({
+    this->descSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
-    }));
+    });
 
     const std::vector layout = {
         *this->descSetLayout,
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layout.size()),
         .pSetLayouts = layout.data()
     };
 
-    this->descSet = std::move(vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo}.front());
+    this->descSet = std::move(vk::raii::DescriptorSets{device, descriptorSetAllocateInfo}.front());
 
-    this->layout = runtime.createPipelineLayout(layout, {});
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
+    this->layout = VulkanRuntime::createPipelineLayout(device, layout, {});
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smAngular, this->layout);
 
     this->imageAngularFilters = std::vector<std::shared_ptr<VulkanImage>>(FSIM_ORIENTATIONS);
 }

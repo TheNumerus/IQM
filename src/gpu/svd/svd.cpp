@@ -1,6 +1,6 @@
 /*
-* Image Quality Metrics
- * Petr Volf - 2024
+ * Image Quality Metrics
+ * Petr Volf - 2025
  */
 
 #include "svd.h"
@@ -10,34 +10,38 @@
 #include <algorithm>
 #include <execution>
 
-static uint32_t srcReduce[] =
+static std::vector<uint32_t> srcReduce =
 #include <svd/svd_reduce.inc>
 ;
 
-static uint32_t srcSort[] =
+static std::vector<uint32_t> srcSort =
 #include <lib/multi_radixsort.inc>
 ;
 
-static uint32_t srcSortHistogram[] =
+static std::vector<uint32_t> srcSortHistogram =
 #include <lib/multi_radixsort_histograms.inc>
 ;
 
-static uint32_t srcSum[] =
+static std::vector<uint32_t> srcSum =
 #include <svd/msvd_sum.inc>
 ;
 
-IQM::GPU::SVD::SVD(const VulkanRuntime &runtime) {
-    this->kernelReduce = runtime.createShaderModule(srcReduce, sizeof(srcReduce));
-    this->kernelSort = runtime.createShaderModule(srcSort, sizeof(srcSort));
-    this->kernelSortHistogram = runtime.createShaderModule(srcSortHistogram, sizeof(srcSortHistogram));
-    this->kernelSum = runtime.createShaderModule(srcSum, sizeof(srcSum));
+IQM::GPU::SVD::SVD(const vk::raii::Device &device) {
+    const auto smReduce = VulkanRuntime::createShaderModule(device,  srcReduce);
+    const auto smSort = VulkanRuntime::createShaderModule(device, srcSort);
+    const auto smSortHistogram = VulkanRuntime::createShaderModule(device, srcSortHistogram);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcSum);
 
-    this->descSetLayoutReduce = std::move(runtime.createDescLayout({
+    this->descPool = VulkanRuntime::createDescPool(device, 8, {
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 24},
+    });
+
+    this->descSetLayoutReduce = std::move(VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
     }));
 
-    this->descSetLayoutSort = std::move(runtime.createDescLayout({
+    this->descSetLayoutSort = std::move(VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
@@ -53,12 +57,12 @@ IQM::GPU::SVD::SVD(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = this->descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto createdLayouts = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto createdLayouts = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSetReduce = std::move(createdLayouts[0]);
     this->descSetSortEven = std::move(createdLayouts[1]);
     this->descSetSortOdd = std::move(createdLayouts[2]);
@@ -71,15 +75,15 @@ IQM::GPU::SVD::SVD(const VulkanRuntime &runtime) {
     const auto rangesSum = VulkanRuntime::createPushConstantRange(2 * sizeof(uint32_t));
     const auto rangesSort = VulkanRuntime::createPushConstantRange(4 * sizeof(uint32_t));
 
-    this->layoutReduce = runtime.createPipelineLayout(layouts, ranges);
-    this->layoutSort = runtime.createPipelineLayout({this->descSetLayoutSort}, {rangesSort});
-    this->layoutSortHistogram = runtime.createPipelineLayout({this->descSetLayoutReduce}, {rangesSort});
-    this->layoutSum = runtime.createPipelineLayout({this->descSetLayoutReduce}, {rangesSum});
+    this->layoutReduce = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutReduce}, ranges);
+    this->layoutSort = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutSort}, {rangesSort});
+    this->layoutSortHistogram = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutReduce}, {rangesSort});
+    this->layoutSum = VulkanRuntime::createPipelineLayout(device, {this->descSetLayoutReduce}, {rangesSum});
 
-    this->pipelineReduce = runtime.createComputePipeline(this->kernelReduce, this->layoutReduce);
-    this->pipelineSort = runtime.createComputePipeline(this->kernelSort, this->layoutSort);
-    this->pipelineSortHistogram = runtime.createComputePipeline(this->kernelSortHistogram, this->layoutSortHistogram);
-    this->pipelineSum = runtime.createComputePipeline(this->kernelSum, this->layoutSum);
+    this->pipelineReduce = VulkanRuntime::createComputePipeline(device, smReduce, this->layoutReduce);
+    this->pipelineSort = VulkanRuntime::createComputePipeline(device, smSort, this->layoutSort);
+    this->pipelineSortHistogram = VulkanRuntime::createComputePipeline(device, smSortHistogram, this->layoutSortHistogram);
+    this->pipelineSum = VulkanRuntime::createComputePipeline(device, smSum, this->layoutSum);
 }
 
 IQM::GPU::SVDResult IQM::GPU::SVD::computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref) {

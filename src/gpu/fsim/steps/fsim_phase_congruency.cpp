@@ -1,42 +1,41 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_phase_congruency.h"
 
 #include <fsim.h>
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_phase_congruency.inc>
 ;
 
-IQM::GPU::FSIMPhaseCongruency::FSIMPhaseCongruency(const VulkanRuntime &runtime) {
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
+IQM::GPU::FSIMPhaseCongruency::FSIMPhaseCongruency(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smPc = VulkanRuntime::createShaderModule(device, src);
 
-    //custom layout for this pass
-    this->descSetLayout = std::move(runtime.createDescLayout({
+    this->descSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, FSIM_ORIENTATIONS * 2},
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS * 2},
-    }));
+    });
 
     const std::vector layouts = {
         *this->descSetLayout,
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(sets[0]);
 
-    this->layout = runtime.createPipelineLayout(layouts, {});
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
+    this->layout = VulkanRuntime::createPipelineLayout(device, layouts, {});
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smPc, this->layout);
 }
 
 void IQM::GPU::FSIMPhaseCongruency::compute(

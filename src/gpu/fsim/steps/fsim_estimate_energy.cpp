@@ -1,33 +1,32 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_estimate_energy.h"
 
 #include <fsim.h>
 
-static uint32_t srcMultFilters[] =
+static std::vector<uint32_t> srcMultFilters =
 #include <fsim/fsim_mult_filters.inc>
 ;
 
-static uint32_t srcEnergySum[] =
+static std::vector<uint32_t> srcEnergySum =
 #include <fsim/fsim_noise_energy_sum.inc>
 ;
 
-IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const VulkanRuntime &runtime) {
-    this->estimateEnergyKernel = runtime.createShaderModule(srcMultFilters, sizeof(srcMultFilters));
-    this->sumKernel = runtime.createShaderModule(srcEnergySum, sizeof(srcEnergySum));
+IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smEstimate = VulkanRuntime::createShaderModule(device, srcMultFilters);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcEnergySum);
 
-    //custom layout for this pass
-    this->estimateEnergyDescSetLayout = std::move(runtime.createDescLayout({
+    this->estimateEnergyDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, FSIM_ORIENTATIONS * 2},
-    }));
+    });
 
-    this->sumDescSetLayout = std::move(runtime.createDescLayout({
+    this->sumDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, FSIM_ORIENTATIONS * 2},
-    }));
+    });
 
     const std::vector layouts = {
         *this->estimateEnergyDescSetLayout,
@@ -35,23 +34,23 @@ IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->estimateEnergyDescSet = std::move(sets[0]);
     this->sumDescSet = std::move(sets[1]);
 
     const auto estimateEnergyRanges = VulkanRuntime::createPushConstantRange(sizeof(int));
     const auto sumRanges = VulkanRuntime::createPushConstantRange(2 * sizeof(int));
 
-    this->estimateEnergyLayout = runtime.createPipelineLayout({this->estimateEnergyDescSetLayout}, estimateEnergyRanges);
-    this->estimateEnergyPipeline = runtime.createComputePipeline(this->estimateEnergyKernel, this->estimateEnergyLayout);
+    this->estimateEnergyLayout = VulkanRuntime::createPipelineLayout(device, {this->estimateEnergyDescSetLayout}, estimateEnergyRanges);
+    this->estimateEnergyPipeline = VulkanRuntime::createComputePipeline(device, smEstimate, this->estimateEnergyLayout);
 
-    this->sumLayout = runtime.createPipelineLayout({this->sumDescSetLayout}, sumRanges);
-    this->sumPipeline = runtime.createComputePipeline(this->sumKernel, this->sumLayout);
+    this->sumLayout = VulkanRuntime::createPipelineLayout(device, {this->sumDescSetLayout}, sumRanges);
+    this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 }
 
 void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuf, const int width, const int height) {

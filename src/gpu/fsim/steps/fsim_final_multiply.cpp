@@ -1,33 +1,32 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #include "fsim_final_multiply.h"
 
-static uint32_t src[] =
+static std::vector<uint32_t> src =
 #include <fsim/fsim_final_multiply.inc>
 ;
 
-static uint32_t srcSum[] =
+static std::vector<uint32_t> srcSum =
 #include <fsim/fsim_final_sum.inc>
 ;
 
-IQM::GPU::FSIMFinalMultiply::FSIMFinalMultiply(const VulkanRuntime &runtime) {
-    this->kernel = runtime.createShaderModule(src, sizeof(src));
-    this->sumKernel = runtime.createShaderModule(srcSum, sizeof(srcSum));
+IQM::GPU::FSIMFinalMultiply::FSIMFinalMultiply(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+    const auto smMul = VulkanRuntime::createShaderModule(device, src);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcSum);
 
-    //custom layout for this pass
-    this->descSetLayout = std::move(runtime.createDescLayout({
+    this->descSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 2},
         {vk::DescriptorType::eStorageImage, 3},
-    }));
+    });
 
-    this->sumDescSetLayout = std::move(runtime.createDescLayout({
+    this->sumDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
-    }));
+    });
 
     const std::vector layouts = {
         *this->descSetLayout,
@@ -35,23 +34,23 @@ IQM::GPU::FSIMFinalMultiply::FSIMFinalMultiply(const VulkanRuntime &runtime) {
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
-        .descriptorPool = runtime._descPool,
+        .descriptorPool = descPool,
         .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
         .pSetLayouts = layouts.data()
     };
 
-    auto sets = vk::raii::DescriptorSets{runtime._device, descriptorSetAllocateInfo};
+    auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(sets[0]);
     this->sumDescSet = std::move(sets[1]);
 
     // 1x int - buffer size
     const auto sumRanges = VulkanRuntime::createPushConstantRange(sizeof(int));
 
-    this->layout = runtime.createPipelineLayout({this->descSetLayout}, {});
-    this->pipeline = runtime.createComputePipeline(this->kernel, this->layout);
+    this->layout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, {});
+    this->pipeline = VulkanRuntime::createComputePipeline(device, smMul, this->layout);
 
-    this->sumLayout = runtime.createPipelineLayout({this->sumDescSetLayout}, {sumRanges});
-    this->sumPipeline = runtime.createComputePipeline(this->sumKernel, this->sumLayout);
+    this->sumLayout = VulkanRuntime::createPipelineLayout(device, {this->sumDescSetLayout}, {sumRanges});
+    this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 
     this->images = std::vector<std::shared_ptr<VulkanImage>>(3);
 }

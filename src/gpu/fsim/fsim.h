@@ -1,6 +1,6 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef FSIM_H
@@ -32,7 +32,7 @@ namespace IQM::GPU {
 
     class FSIM {
     public:
-        explicit FSIM(const VulkanRuntime &runtime);
+        explicit FSIM(const vk::raii::Device &device);
         FSIMResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
 
     private:
@@ -46,6 +46,11 @@ namespace IQM::GPU {
         void computeFft(const VulkanRuntime &runtime, int width, int height);
         void computeMassInverseFft(const VulkanRuntime & runtime, const vk::raii::Buffer &buffer);
 
+        vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
+
+        vk::raii::DescriptorSetLayout descSetLayoutImageOp = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutImBufOp = VK_NULL_HANDLE;
+
         FSIMLowpassFilter lowpassFilter;
         FSIMLogGabor logGaborFilter;
         FSIMAngularFilter angularFilter;
@@ -56,7 +61,6 @@ namespace IQM::GPU {
         FSIMPhaseCongruency phaseCongruency;
         FSIMFinalMultiply final_multiply;
 
-        vk::raii::ShaderModule downscaleKernel = VK_NULL_HANDLE;
         vk::raii::PipelineLayout layoutDownscale = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineDownscale = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetDownscaleIn = VK_NULL_HANDLE;
@@ -73,7 +77,6 @@ namespace IQM::GPU {
         vk::raii::Pipeline pipelineGradientMap = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGradientMapIn = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGradientMapRef = VK_NULL_HANDLE;
-        vk::raii::ShaderModule kernelGradientMap = VK_NULL_HANDLE;
 
         std::shared_ptr<VulkanImage> imageGradientMapInput;
         std::shared_ptr<VulkanImage> imageGradientMapRef;
@@ -83,7 +86,6 @@ namespace IQM::GPU {
         vk::raii::Pipeline pipelineExtractLuma = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetExtractLumaIn = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetExtractLumaRef = VK_NULL_HANDLE;
-        vk::raii::ShaderModule kernelExtractLuma = VK_NULL_HANDLE;
 
         vk::raii::DeviceMemory memoryFft = VK_NULL_HANDLE;
         vk::raii::Buffer bufferFft = VK_NULL_HANDLE;
