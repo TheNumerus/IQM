@@ -220,8 +220,7 @@ void IQM::GPU::FSIM::sendImagesToGpu(const VulkanRuntime &runtime, const InputIm
     };
     runtime._cmd_bufferTransfer->begin(beginInfo);
 
-    runtime.setImageLayout(runtime._cmd_bufferTransfer, this->imageInput->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-    runtime.setImageLayout(runtime._cmd_bufferTransfer, this->imageRef->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
+    VulkanRuntime::initImages(runtime._cmd_bufferTransfer, {this->imageInput, this->imageRef});
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -283,6 +282,13 @@ void IQM::GPU::FSIM::createDownscaledImages(const VulkanRuntime &runtime, int wi
     this->imageGradientMapInput = std::make_shared<VulkanImage>(runtime.createImage(imageFloatInfo));
     this->imageGradientMapRef = std::make_shared<VulkanImage>(runtime.createImage(imageFloatInfo));
 
+    VulkanRuntime::initImages(runtime._cmd_bufferTransfer,{
+        this->imageInputDownscaled,
+        this->imageRefDownscaled,
+        this->imageGradientMapInput,
+        this->imageGradientMapRef
+    });
+
     auto imageInfosInput = VulkanRuntime::createImageInfos({
         this->imageInput,
         this->imageInputDownscaled,
@@ -335,9 +341,6 @@ void IQM::GPU::FSIM::createDownscaledImages(const VulkanRuntime &runtime, int wi
 }
 
 void IQM::GPU::FSIM::computeDownscaledImages(const VulkanRuntime &runtime, const int F, const int width, const int height) {
-    runtime.setImageLayout(runtime._cmd_buffer, this->imageInputDownscaled->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-    runtime.setImageLayout(runtime._cmd_buffer, this->imageRefDownscaled->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-
     runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineDownscale);
     runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutDownscale, 0, {this->descSetDownscaleIn}, {});
 
@@ -353,9 +356,6 @@ void IQM::GPU::FSIM::computeDownscaledImages(const VulkanRuntime &runtime, const
 }
 
 void IQM::GPU::FSIM::createGradientMap(const VulkanRuntime &runtime, int width, int height) {
-    runtime.setImageLayout(runtime._cmd_buffer, this->imageGradientMapInput->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-    runtime.setImageLayout(runtime._cmd_buffer, this->imageGradientMapRef->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-
     runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineGradientMap);
     runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGradientMap, 0, {this->descSetGradientMapIn}, {});
 

@@ -40,8 +40,6 @@ IQM::GPU::FSIMLowpassFilter::FSIMLowpassFilter(const vk::raii::Device &device, c
 void IQM::GPU::FSIMLowpassFilter::constructFilter(const VulkanRuntime &runtime, const int width, const int height) {
     this->prepareImageStorage(runtime, width, height);
 
-    runtime.setImageLayout(runtime._cmd_buffer, this->imageLowpassFilter->image, vk::ImageLayout::eUndefined, vk::ImageLayout::eGeneral);
-
     runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipeline);
     runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layout, 0, {this->descSet}, {});
 
@@ -75,6 +73,8 @@ void IQM::GPU::FSIMLowpassFilter::prepareImageStorage(const VulkanRuntime &runti
     };
 
     this->imageLowpassFilter = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+
+    VulkanRuntime::initImages(runtime._cmd_buffer, {this->imageLowpassFilter});
 
     auto imageInfos = VulkanRuntime::createImageInfos({
         this->imageLowpassFilter,
