@@ -3,7 +3,7 @@
  * Petr Volf - 2025
  */
 
-#include "svd.h"
+#include <IQM/svd.h>
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>

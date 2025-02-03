@@ -3,14 +3,14 @@
  * Petr Volf - 2025
  */
 
-#include "vulkan_runtime.h"
+#include <IQM/base/vulkan_runtime.h>
 
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 
-#include "vulkan_image.h"
+#include <IQM/base/vulkan_image.h>
 
 #ifdef PROFILE
 #define GLFW_INCLUDE_VULKAN

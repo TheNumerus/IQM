@@ -3,7 +3,7 @@
  * Petr Volf - 2025
  */
 
-#include "flip_color_pipeline.h"
+#include <IQM/flip/color_pipeline.h>
 
 static std::vector<uint32_t> srcHorizontal =
 #include <flip/spatial_prefilter_horizontal.inc>

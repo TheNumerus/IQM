@@ -3,7 +3,7 @@
  * Petr Volf - 2025
  */
 
-#include "ssim.h"
+#include <IQM/ssim.h>
 
 static std::vector<uint32_t> src =
 #include <ssim/ssim.inc>

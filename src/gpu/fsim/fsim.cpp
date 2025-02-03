@@ -3,10 +3,10 @@
  * Petr Volf - 2025
  */
 
-#include "fsim.h"
+#include <IQM/fsim.h>
 
-#include "fft_planner.h"
-#include "../img_params.h"
+#include <IQM/fsim/fft_planner.h>
+#include <IQM/base/img_params.h>
 
 static std::vector<uint32_t> srcDownscale =
 #include <fsim/fsim_downsample.inc>

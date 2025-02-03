@@ -3,8 +3,8 @@
  * Petr Volf - 2025
  */
 
-#include "flip.h"
-#include "viridis.h"
+#include <IQM/flip.h>
+#include <IQM/flip/viridis.h>
 
 static std::vector<uint32_t> srcInputConvert =
 #include <flip/srgb_to_ycxcz.inc>
