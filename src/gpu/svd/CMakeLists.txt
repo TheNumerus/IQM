@@ -10,4 +10,4 @@ target_include_directories(IQM-SVD
         PRIVATE "../../../shaders_out"
 )
 
-target_link_libraries(IQM-SVD PUBLIC Vulkan::Vulkan IQM::LibBase ${OpenCV_LIBS})
+target_link_libraries(IQM-SVD PUBLIC Vulkan::Vulkan IQM::LibBase ${OpenCV_LIBS} tbb)

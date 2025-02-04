@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.29)
 project(IQM-LibBase)
 
 add_library(IQM-LibBase STATIC vulkan_runtime.cpp)
-
 add_library(IQM::LibBase ALIAS IQM-LibBase)
 
 find_package(Vulkan REQUIRED)

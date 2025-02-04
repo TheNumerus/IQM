@@ -18,19 +18,19 @@
 #include <GLFW/glfw3.h>
 
 #if COMPILE_SSIM
-#include <ssim.h>
+#include <IQM/ssim.h>
 #endif
 
 #if COMPILE_SVD
-#include <svd.h>
+#include <IQM/svd.h>
 #endif
 
 #if COMPILE_FSIM
-#include <fsim.h>
+#include <IQM/fsim.h>
 #endif
 
 #if COMPILE_FLIP
-#include <flip.h>
+#include <IQM/flip.h>
 #endif
 
 InputImage load_image(const std::string &filename) {
