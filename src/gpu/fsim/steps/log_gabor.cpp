@@ -68,7 +68,7 @@ void IQM::GPU::FSIMLogGabor::prepareImageStorage(const VulkanRuntime &runtime, c
     };
 
     for (unsigned i = 0; i < FSIM_SCALES; i++) {
-        this->imageLogGaborFilters[i] = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+        this->imageLogGaborFilters[i] = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
     }
 
     auto imageInfosLowpass = VulkanRuntime::createImageInfos({lowpass});

@@ -104,7 +104,7 @@ void IQM::GPU::FSIMFinalMultiply::prepareImageStorage(
     };
 
     for (unsigned i = 0; i < 3; i++) {
-        this->images[i] = std::move(std::make_shared<VulkanImage>(runtime.createImage(imageInfo)));
+        this->images[i] = std::move(std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo)));
     }
 
     auto inImageInfos = VulkanRuntime::createImageInfos(inputImgs);
@@ -136,7 +136,9 @@ void IQM::GPU::FSIMFinalMultiply::prepareImageStorage(
         outImageInfos
     );
 
-    auto [sumBuf, sumMem] = runtime.createBuffer(
+    auto [sumBuf, sumMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         width * height * sizeof(float),
         vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -167,7 +169,9 @@ void IQM::GPU::FSIMFinalMultiply::prepareImageStorage(
 }
 
 std::pair<float, float> IQM::GPU::FSIMFinalMultiply::sumImages(const VulkanRuntime &runtime, int width, int height) {
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         3 * sizeof(float),
         vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent

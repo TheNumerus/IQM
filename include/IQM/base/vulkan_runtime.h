@@ -26,8 +26,16 @@ namespace IQM::GPU {
             const vk::raii::Device &device,
             const vk::raii::ShaderModule &shader,
             const vk::raii::PipelineLayout &layout);
-        [[nodiscard]] std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(unsigned bufferSize, vk::BufferUsageFlags bufferFlags, vk::MemoryPropertyFlags memoryFlags) const;
-        [[nodiscard]] VulkanImage createImage(const vk::ImageCreateInfo &imageInfo) const;
+        [[nodiscard]] static std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
+            const vk::raii::Device &device,
+            const vk::raii::PhysicalDevice &physicalDevice,
+            unsigned bufferSize,
+            vk::BufferUsageFlags bufferFlags,
+            vk::MemoryPropertyFlags memoryFlags);
+        [[nodiscard]] static VulkanImage createImage(
+            const vk::raii::Device &device,
+            const vk::raii::PhysicalDevice &physicalDevice,
+            const vk::ImageCreateInfo &imageInfo);
         [[nodiscard]] static vk::raii::DescriptorPool createDescPool(
             const vk::raii::Device &device,
             uint32_t maxSets,

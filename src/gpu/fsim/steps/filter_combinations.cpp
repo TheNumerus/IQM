@@ -138,16 +138,20 @@ void IQM::GPU::FSIMFilterCombinations::prepareBufferStorage(const VulkanRuntime 
 
     // oversize, so parallel sum can be done directly there
     uint64_t noiseLevelsBufferSize = (FSIM_ORIENTATIONS + (width * height * 2 * 2)) * sizeof(float);
-    auto [noiseLevelsBuf, noiseLevelsMemory] = runtime.createBuffer(
-            noiseLevelsBufferSize,
-            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
-            vk::MemoryPropertyFlagBits::eDeviceLocal
-        );
+    auto [noiseLevelsBuf, noiseLevelsMemory] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
+        noiseLevelsBufferSize,
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
     noiseLevelsBuf.bindMemory(noiseLevelsMemory, 0);
     this->noiseLevels = std::move(noiseLevelsBuf);
     this->noiseLevelsMemory = std::move(noiseLevelsMemory);
 
-    auto [fftBuf, fftMem] = runtime.createBuffer(
+    auto [fftBuf, fftMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         outFftBufSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eDeviceLocal

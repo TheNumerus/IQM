@@ -171,12 +171,16 @@ int IQM::GPU::FSIM::computeDownscaleFactor(const int width, const int height) {
 
 void IQM::GPU::FSIM::sendImagesToGpu(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref) {
     const auto size = image.width * image.height * 4;
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
-    auto [stgRefBuf, stgRefMem] = runtime.createBuffer(
+    auto [stgRefBuf, stgRefMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
@@ -211,8 +215,8 @@ void IQM::GPU::FSIM::sendImagesToGpu(const VulkanRuntime &runtime, const InputIm
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 
-    this->imageInput = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
-    this->imageRef = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
+    this->imageInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
+    this->imageRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
 
     // copy data to images, correct formats
     const vk::CommandBufferBeginInfo beginInfo = {
@@ -277,10 +281,10 @@ void IQM::GPU::FSIM::createDownscaledImages(const VulkanRuntime &runtime, int wi
     imageFftInfo.format = vk::Format::eR32G32Sfloat;
     imageFftInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
 
-    this->imageInputDownscaled = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
-    this->imageRefDownscaled = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
-    this->imageGradientMapInput = std::make_shared<VulkanImage>(runtime.createImage(imageFloatInfo));
-    this->imageGradientMapRef = std::make_shared<VulkanImage>(runtime.createImage(imageFloatInfo));
+    this->imageInputDownscaled = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
+    this->imageRefDownscaled = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
+    this->imageGradientMapInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageFloatInfo));
+    this->imageGradientMapRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageFloatInfo));
 
     VulkanRuntime::initImages(runtime._cmd_bufferTransfer,{
         this->imageInputDownscaled,
@@ -386,7 +390,9 @@ void IQM::GPU::FSIM::computeFft(const VulkanRuntime &runtime, const int width, c
     // image size * 2 float components (complex numbers) * 2 batches
     uint64_t bufferSize = width * height * sizeof(float) * 2 * 2;
 
-    auto [fftBuf, fftMem] = runtime.createBuffer(
+    auto [fftBuf, fftMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         bufferSize,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eDeviceLocal

@@ -87,8 +87,8 @@ void IQM::GPU::FSIMPhaseCongruency::prepareImageStorage(
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 
-    this->pcInput = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
-    this->pcRef = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+    this->pcInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
+    this->pcRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
 
     auto images = VulkanRuntime::createImageInfos({this->pcInput, this->pcRef});
 

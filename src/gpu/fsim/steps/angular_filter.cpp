@@ -67,7 +67,7 @@ void IQM::GPU::FSIMAngularFilter::prepareImageStorage(const VulkanRuntime &runti
     };
 
     for (unsigned i = 0; i < FSIM_ORIENTATIONS; i++) {
-        this->imageAngularFilters[i] = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+        this->imageAngularFilters[i] = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
     }
 
     auto imageInfos = VulkanRuntime::createImageInfos({this->imageAngularFilters});

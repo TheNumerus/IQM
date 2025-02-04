@@ -120,7 +120,12 @@ uint32_t findMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperti
     return typeIndex;
 }
 
-std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::GPU::VulkanRuntime::createBuffer(const unsigned bufferSize, const vk::BufferUsageFlags bufferFlags, const vk::MemoryPropertyFlags memoryFlags) const {
+std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::GPU::VulkanRuntime::createBuffer(
+    const vk::raii::Device &device,
+    const vk::raii::PhysicalDevice &physicalDevice,
+    unsigned bufferSize,
+    vk::BufferUsageFlags bufferFlags,
+    vk::MemoryPropertyFlags memoryFlags) {
     // create now, so it's destroyed before buffer
     vk::raii::DeviceMemory memory{nullptr};
 
@@ -129,10 +134,10 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::GPU::VulkanRuntime::cre
         .usage = bufferFlags,
     };
 
-    vk::raii::Buffer buffer{this->_device, bufferCreateInfo};
+    vk::raii::Buffer buffer{device, bufferCreateInfo};
     auto memReqs = buffer.getMemoryRequirements();
     const auto memType = findMemoryType(
-        this->_physicalDevice.getMemoryProperties(),
+        physicalDevice.getMemoryProperties(),
         memReqs.memoryTypeBits,
         memoryFlags
     );
@@ -142,19 +147,22 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::GPU::VulkanRuntime::cre
         .memoryTypeIndex = memType
     };
 
-    memory = vk::raii::DeviceMemory{this->_device, memoryAllocateInfo};
+    memory = vk::raii::DeviceMemory{device, memoryAllocateInfo};
 
     return std::make_pair(std::move(buffer), std::move(memory));
 }
 
-IQM::GPU::VulkanImage IQM::GPU::VulkanRuntime::createImage(const vk::ImageCreateInfo &imageInfo) const {
+IQM::GPU::VulkanImage IQM::GPU::VulkanRuntime::createImage(
+    const vk::raii::Device &device,
+    const vk::raii::PhysicalDevice &physicalDevice,
+    const vk::ImageCreateInfo &imageInfo) {
     // create now, so it's destroyed before buffer
     vk::raii::DeviceMemory memory{nullptr};
 
-    vk::raii::Image image{this->_device, imageInfo};
+    vk::raii::Image image{device, imageInfo};
     auto memReqs = image.getMemoryRequirements();
     const auto memType = findMemoryType(
-        this->_physicalDevice.getMemoryProperties(),
+        physicalDevice.getMemoryProperties(),
         memReqs.memoryTypeBits,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
@@ -164,7 +172,7 @@ IQM::GPU::VulkanImage IQM::GPU::VulkanRuntime::createImage(const vk::ImageCreate
         .memoryTypeIndex = memType
     };
 
-    memory = vk::raii::DeviceMemory{this->_device, memoryAllocateInfo};
+    memory = vk::raii::DeviceMemory{device, memoryAllocateInfo};
     image.bindMemory(memory, 0);
 
     vk::ImageViewCreateInfo imageViewCreateInfo{
@@ -183,7 +191,7 @@ IQM::GPU::VulkanImage IQM::GPU::VulkanRuntime::createImage(const vk::ImageCreate
     return VulkanImage{
         .memory = std::move(memory),
         .image = std::move(image),
-        .imageView = vk::raii::ImageView{this->_device, imageViewCreateInfo},
+        .imageView = vk::raii::ImageView{device, imageViewCreateInfo},
     };
 }
 

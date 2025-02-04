@@ -175,7 +175,9 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
 }
 
 void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, const vk::raii::Buffer& fftBuffer, const vk::raii::Buffer& filterSums, unsigned size, unsigned histBufSize) {
-    auto [buf, mem] = runtime.createBuffer(
+    auto [buf, mem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         2 * FSIM_ORIENTATIONS * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -184,19 +186,25 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
     this->noisePowers = std::move(buf);
     this->noisePowersMemory = std::move(mem);
 
-    auto [bufSort, memSort] = runtime.createBuffer(
+    auto [bufSort, memSort] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         2 * FSIM_ORIENTATIONS * size * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
 
-    auto [bufTemp, memTemp] = runtime.createBuffer(
+    auto [bufTemp, memTemp] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         2 * FSIM_ORIENTATIONS * size * sizeof(float),
         vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
 
-    auto [bufHist, memHist] = runtime.createBuffer(
+    auto [bufHist, memHist] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         histBufSize,
         vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal

@@ -295,7 +295,9 @@ IQM::GPU::SSIMResult IQM::GPU::SSIM::computeMetric(const VulkanRuntime &runtime,
 
     // allocate one float extra for image sum to compute MSSIM
     const auto outSize = (this->imageParameters.height * this->imageParameters.width + 1) * sizeof(float);
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         outSize,
         vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCached
@@ -366,17 +368,23 @@ void IQM::GPU::SSIM::prepareImages(const VulkanRuntime &runtime, Timestamps& tim
     // always 4 channels on input, with 1B per channel
     const auto size = image.width * image.height * 4;
     const auto sizeTrimmed = (image.width - this->kernelSize + 1) * (image.height - this->kernelSize + 1) * 4;
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
-    auto [stgRefBuf, stgRefMem] = runtime.createBuffer(
+    auto [stgRefBuf, stgRefMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
-    auto [mssimBuf, mssimMem] = runtime.createBuffer(
+    auto [mssimBuf, mssimMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeTrimmed,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -436,13 +444,13 @@ void IQM::GPU::SSIM::prepareImages(const VulkanRuntime &runtime, Timestamps& tim
     dstImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
     dstImageInfo.format = vk::Format::eR32Sfloat;
 
-    this->imageInput = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
-    this->imageRef = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
-    this->imageOut = std::make_shared<VulkanImage>(runtime.createImage(dstImageInfo));
-    this->imageBlurredTemp = std::make_shared<VulkanImage>(runtime.createImage(intermediateImageInfo));
+    this->imageInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
+    this->imageRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
+    this->imageOut = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, dstImageInfo));
+    this->imageBlurredTemp = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, intermediateImageInfo));
 
     for (int i = 0; i < 5; i++) {
-        this->imagesBlurred[i] = std::move(std::make_shared<VulkanImage>(runtime.createImage(intermediateImageInfo)));
+        this->imagesBlurred[i] = std::move(std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, intermediateImageInfo)));
     }
 
     timestamps.mark("images created");

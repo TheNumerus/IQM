@@ -251,7 +251,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     assert(sizeInput > sizeOutput);
 
     // one staging buffer should be enough
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeInput,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
@@ -260,7 +262,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     this->stgBuffer = std::move(stgBuf);
     this->stgMemory = std::move(stgMem);
 
-    auto [buf, mem] = runtime.createBuffer(
+    auto [buf, mem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeInput,
         vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -269,7 +273,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     this->inputBuffer = std::move(buf);
     this->inputMemory = std::move(mem);
 
-    auto [outBuf, outMem] = runtime.createBuffer(
+    auto [outBuf, outMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeOutput,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -278,7 +284,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     this->outBuffer = std::move(outBuf);
     this->outMemory = std::move(outMem);
 
-    auto [outSortBuf, outSortMem] = runtime.createBuffer(
+    auto [outSortBuf, outSortMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeOutput,
         vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -287,7 +295,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     this->outSortBuffer = std::move(outSortBuf);
     this->outSortMemory = std::move(outSortMem);
 
-    auto [outSortTempBuf, outSortTempMem] = runtime.createBuffer(
+    auto [outSortTempBuf, outSortTempMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         sizeOutput,
         vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -296,7 +306,9 @@ void IQM::GPU::SVD::prepareBuffers(const VulkanRuntime &runtime, size_t sizeInpu
     this->outSortTempBuffer = std::move(outSortTempBuf);
     this->outSortTempMemory = std::move(outSortTempMem);
 
-    auto [outSortHistBuf, outSortHistMem] = runtime.createBuffer(
+    auto [outSortHistBuf, outSortHistMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         histBufInput,
         vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal

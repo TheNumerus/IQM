@@ -121,7 +121,9 @@ void IQM::GPU::FSIMEstimateEnergy::prepareBufferStorage(const VulkanRuntime &run
     this->energyBuffers = std::vector<vk::raii::Buffer>();
     this->energyBuffersMemory = std::vector<vk::raii::DeviceMemory>();
     for (int i = 0; i < 2 * FSIM_ORIENTATIONS; i++) {
-        auto [buf, mem] = runtime.createBuffer(
+        auto [buf, mem] = VulkanRuntime::createBuffer(
+            runtime._device,
+            runtime._physicalDevice,
             bufferSize,
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal

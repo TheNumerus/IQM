@@ -164,19 +164,25 @@ IQM::GPU::FLIPResult IQM::GPU::FLIP::computeMetric(const VulkanRuntime &runtime,
 void IQM::GPU::FLIP::prepareImageStorage(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref, int kernel_size) {
     // always 4 channels on input, with 1B per channel
     const auto size = image.width * image.height * 4;
-    auto [stgBuf, stgMem] = runtime.createBuffer(
+    auto [stgBuf, stgMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
-    auto [stgRefBuf, stgRefMem] = runtime.createBuffer(
+    auto [stgRefBuf, stgRefMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
 
     const auto colorMapSize = 256 * 4 * sizeof(float);
-    auto [stgColorMapBuf, stgColorMapMem] = runtime.createBuffer(
+    auto [stgColorMapBuf, stgColorMapMem] = VulkanRuntime::createBuffer(
+        runtime._device,
+        runtime._physicalDevice,
         colorMapSize,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
@@ -252,16 +258,16 @@ void IQM::GPU::FLIP::prepareImageStorage(const VulkanRuntime &runtime, const Inp
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 
-    this->imageInput = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
-    this->imageRef = std::make_shared<VulkanImage>(runtime.createImage(srcImageInfo));
-    this->imageYccInput = std::make_shared<VulkanImage>(runtime.createImage(yccImageInfo));
-    this->imageYccRef = std::make_shared<VulkanImage>(runtime.createImage(yccImageInfo));
-    this->imageOut = std::make_shared<VulkanImage>(runtime.createImage(yccImageInfo));
-    this->imageFilterTempInput = std::make_shared<VulkanImage>(runtime.createImage(yccImageInfo));
-    this->imageFilterTempRef = std::make_shared<VulkanImage>(runtime.createImage(yccImageInfo));
-    this->imageFeatureFilters = std::make_shared<VulkanImage>(runtime.createImage(featureFilterImageInfo));
-    this->imageFeatureError = std::make_shared<VulkanImage>(runtime.createImage(errorImageInfo));
-    this->imageColorMap = std::make_shared<VulkanImage>(runtime.createImage(colorMapImageInfo));
+    this->imageInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
+    this->imageRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, srcImageInfo));
+    this->imageYccInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, yccImageInfo));
+    this->imageYccRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, yccImageInfo));
+    this->imageOut = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, yccImageInfo));
+    this->imageFilterTempInput = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, yccImageInfo));
+    this->imageFilterTempRef = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, yccImageInfo));
+    this->imageFeatureFilters = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, featureFilterImageInfo));
+    this->imageFeatureError = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, errorImageInfo));
+    this->imageColorMap = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, colorMapImageInfo));
 
     VulkanRuntime::initImages(runtime._cmd_bufferTransfer, {
         this->imageInput,

@@ -87,8 +87,8 @@ void IQM::GPU::FSIMSumFilterResponses::prepareImageStorage(const VulkanRuntime &
     };
 
     for (int i = 0; i < FSIM_ORIENTATIONS; i++) {
-        this->filterResponsesInput[i] = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
-        this->filterResponsesRef[i] = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+        this->filterResponsesInput[i] = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
+        this->filterResponsesRef[i] = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
     }
 
     auto imageInfosIn = VulkanRuntime::createImageInfos(this->filterResponsesInput);

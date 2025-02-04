@@ -72,7 +72,7 @@ void IQM::GPU::FSIMLowpassFilter::prepareImageStorage(const VulkanRuntime &runti
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 
-    this->imageLowpassFilter = std::make_shared<VulkanImage>(runtime.createImage(imageInfo));
+    this->imageLowpassFilter = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, imageInfo));
 
     VulkanRuntime::initImages(runtime._cmd_buffer, {this->imageLowpassFilter});
 

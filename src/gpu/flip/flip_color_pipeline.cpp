@@ -173,12 +173,12 @@ void IQM::GPU::FLIPColorPipeline::prepareStorage(const VulkanRuntime &runtime, i
     vk::ImageCreateInfo colorErrorImageInfo = {prefilterImageInfo};
     colorErrorImageInfo.format = vk::Format::eR32Sfloat;
 
-    this->csfFilter = std::make_shared<VulkanImage>(runtime.createImage(filterImageInfo));
-    this->inputPrefilter = std::make_shared<VulkanImage>(runtime.createImage(prefilterImageInfo));
-    this->refPrefilter = std::make_shared<VulkanImage>(runtime.createImage(prefilterImageInfo));
-    this->inputPrefilterTemp = std::make_shared<VulkanImage>(runtime.createImage(prefilterImageInfo));
-    this->refPrefilterTemp = std::make_shared<VulkanImage>(runtime.createImage(prefilterImageInfo));
-    this->imageColorError = std::make_shared<VulkanImage>(runtime.createImage(colorErrorImageInfo));
+    this->csfFilter = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, filterImageInfo));
+    this->inputPrefilter = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, prefilterImageInfo));
+    this->refPrefilter = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, prefilterImageInfo));
+    this->inputPrefilterTemp = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, prefilterImageInfo));
+    this->refPrefilterTemp = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, prefilterImageInfo));
+    this->imageColorError = std::make_shared<VulkanImage>(VulkanRuntime::createImage(runtime._device, runtime._physicalDevice, colorErrorImageInfo));
 
     VulkanRuntime::initImages(runtime._cmd_bufferTransfer, {
         this->csfFilter,
