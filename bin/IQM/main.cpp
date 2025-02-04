@@ -6,18 +6,12 @@
 #include <iostream>
 #include <chrono>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_FAILURE_USERMSG
-#include "stb_image.h"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
 #include <IQM/base/vulkan_runtime.h>
 #include <IQM/input_image.h>
 
-#include "../shared/args.h"
+#include "args.h"
 #include "../shared/debug_utils.h"
+#include "../shared/io.h"
 
 #if COMPILE_SSIM
 #include <IQM/ssim.h>
@@ -35,53 +29,8 @@
 #include <IQM/flip.h>
 #endif
 
-InputImage load_image(const std::string &filename) {
-    // force all images to always open in RGBA format to prevent issues with separate RGB and RGBA loading
-    int x, y, channels;
-    unsigned char* data = stbi_load(filename.c_str(), &x, &y, &channels, 4);
-    if (data == nullptr) {
-        const auto err = stbi_failure_reason();
-        const auto msg = std::string("Failed to load image '" + filename + "', reason: " + err);
-        throw std::runtime_error(msg);
-    }
-
-    std::vector<unsigned char> dataVec(x * y * 4);
-    memcpy(dataVec.data(), data, x * y * 4 * sizeof(char));
-
-    stbi_image_free(data);
-
-    return InputImage{
-        .width = x,
-        .height = y,
-        .data = std::move(dataVec)
-    };
-}
-
-std::vector<unsigned char> convertFloatToChar(const std::vector<float>& data) {
-    std::vector<unsigned char> result(data.size());
-
-    for (int i = 0; i < data.size(); ++i) {
-        result[i] = static_cast<unsigned char>(std::clamp(data[i], 0.0f, 1.0f) * 255.0f);
-    }
-
-    return result;
-}
-
-void ssim(const IQM::Args& args) {
+void ssim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
 #ifdef COMPILE_SSIM
-    auto input = load_image(args.inputPath);
-    auto reference = load_image(args.refPath);
-
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    const IQM::GPU::VulkanRuntime vulkan;
-
-    if (args.verbose) {
-        std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
-    }
-
     IQM::GPU::SSIM ssim(vulkan._device);
 
     // starts only in debug, needs to init after vulkan
@@ -101,53 +50,16 @@ void ssim(const IQM::Args& args) {
     }
 
     if (args.outputPath.has_value()) {
-        auto converted = convertFloatToChar(result.imageData);
-
-        auto saveResult = stbi_write_png(args.outputPath.value().c_str(), result.width, result.height, 1, converted.data(), result.width * sizeof(unsigned char));
-        if (saveResult == 0) {
-            throw std::runtime_error("Failed to save output image");
-        }
+        save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
     }
 #else
     throw std::runtime_error("SSIM support was not compiled");
 #endif
 }
 
-void cw_ssim_ref(const IQM::Args& args) {
-    /*auto input = load_image(args.inputPath);
-    auto reference = load_image(args.refPath);
-
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    auto method = IQM::CPU::CW_SSIM_Ref();
-
-    const auto start = std::chrono::high_resolution_clock::now();
-    method.computeMetric(image, ref);
-    const auto end = std::chrono::high_resolution_clock::now();
-
-    if (args.verbose) {
-        auto execTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        std::cout << execTime << std::endl;
-    }*/
-}
-
-void svd(const IQM::Args& args) {
+void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
 #ifdef COMPILE_SVD
-    auto input = load_image(args.inputPath);
-    auto reference = load_image(args.refPath);
-
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    const IQM::GPU::VulkanRuntime vulkan;
     IQM::GPU::SVD svd(vulkan._device);
-
-    if (args.verbose) {
-        std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
-    }
 
     // starts only in debug, needs to init after vulkan
     initRenderDoc();
@@ -166,33 +78,16 @@ void svd(const IQM::Args& args) {
     }
 
     if (args.outputPath.has_value()) {
-        auto converted = convertFloatToChar(result.imageData);
-
-        auto saveResult = stbi_write_png(args.outputPath.value().c_str(), result.width, result.height, 1, converted.data(), result.width * sizeof(unsigned char));
-        if (saveResult == 0) {
-            throw std::runtime_error("Failed to save output image");
-        }
+        save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
     }
 #else
     throw std::runtime_error("SVD support was not compiled");
 #endif
 }
 
-void fsim(const IQM::Args& args) {
+void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
 #ifdef COMPILE_FSIM
-    auto input = load_image(args.inputPath);
-    auto reference = load_image(args.refPath);
-
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    const IQM::GPU::VulkanRuntime vulkan;
     IQM::GPU::FSIM fsim(vulkan._device);
-
-    if (args.verbose) {
-        std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
-    }
 
     // starts only in debug, needs to init after vulkan
     initRenderDoc();
@@ -214,32 +109,23 @@ void fsim(const IQM::Args& args) {
 #endif
 }
 
-void flip(const IQM::Args& args) {
+void flip(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
 #ifdef COMPILE_FLIP
-    auto input = load_image(args.inputPath);
-    auto reference = load_image(args.refPath);
-
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    const IQM::GPU::VulkanRuntime vulkan;
     IQM::GPU::FLIP flip(vulkan._device);
 
     auto flip_args = IQM::GPU::FLIPArguments{};
-    if (args.options.contains("FLIP_WIDTH")) {
-        flip_args.monitor_width = std::stof(args.options.at("FLIP_WIDTH"));
+    if (args.options.contains("--flip-width")) {
+        flip_args.monitor_width = std::stof(args.options.at("--flip-width"));
     }
-    if (args.options.contains("FLIP_RES")) {
-        flip_args.monitor_resolution_x = std::stof(args.options.at("FLIP_RES"));
+    if (args.options.contains("--flip-res")) {
+        flip_args.monitor_resolution_x = std::stof(args.options.at("--flip-res"));
     }
-    if (args.options.contains("FLIP_DISTANCE")) {
-        flip_args.monitor_distance = std::stof(args.options.at("FLIP_DISTANCE"));
+    if (args.options.contains("--flip-distance")) {
+        flip_args.monitor_distance = std::stof(args.options.at("--flip-distance"));
     }
 
     if (args.verbose) {
-        std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl
-        << "FLIP monitor resolution: "<< flip_args.monitor_resolution_x << std::endl
+        std::cout << "FLIP monitor resolution: "<< flip_args.monitor_resolution_x << std::endl
         << "FLIP monitor distance: "<< flip_args.monitor_distance << std::endl
         << "FLIP monitor width: "<< flip_args.monitor_width << std::endl;
     }
@@ -262,32 +148,77 @@ void flip(const IQM::Args& args) {
 #endif
 }
 
-int main(int argc, const char **argv) {
-    auto args = IQM::Args(argc, argv);
-    if (args.verbose) {
-        std::cout << "Selected method: " << IQM::method_name(args.method) << std::endl;
+void printHelp() {
+    std::cout << "IQM - Application for computing image quality metrics.\n"
+    << "Usage: IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]\n\n"
+    << "Arguments:\n"
+    << "    --method <METHOD> : selects method to compute, one of SSIM, SVD, FSIM, FLIP\n"
+    << "    --input <INPUT>   : path to tested image\n"
+    << "    --ref <REF>       : path to reference image\n"
+    << "    --output <OUTPUT> : path to output image, optional\n\n"
+    << "    -v, --verbose     : enables more detailed output\n"
+    << "    -h, --help        : prints help\n\n"
+    << "Method specific arguments:\n"
+    << "FLIP:\n"
+    << "    --flip-width <WIDTH>       : Width of display in meters\n"
+    << "    --flip-res <RES>           : Resolution of display in pixels\n"
+    << "    --flip-distance <DISTANCE> : Distance to display in meters\n"
+    << std::endl;
+}
+
+int main(const int argc, const char **argv) {
+    std::optional<IQM::Args> args;
+
+    try {
+        args = IQM::Args(argc, argv);
+    } catch (std::exception& e) {
+        std::cout << "Error parsing arguments: " << e.what() << std::endl;
+        printHelp();
+        return -1;
+    }
+
+    if (args->printHelp) {
+        printHelp();
+        return 0;
+    }
+
+    if (args->verbose) {
+        std::cout << "Selected method: " << IQM::method_name(args->method) << std::endl;
+    }
+
+    const auto input = load_image(args->inputPath);
+    const auto reference = load_image(args->refPath);
+
+    if (input.width != reference.width || input.height != reference.height) {
+        throw std::runtime_error("Compared images must have the same size");
+    }
+
+    const IQM::GPU::VulkanRuntime vulkan;
+
+    if (args->verbose) {
+        std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
     }
 
     try {
-        switch (args.method) {
+        switch (args->method) {
             case IQM::Method::SSIM:
-                ssim(args);
+                ssim(args.value(), vulkan, input, reference);
                 break;
             case IQM::Method::CW_SSIM_CPU:
-                break;
+                throw std::runtime_error("CW-SSIM is not implemented");
             case IQM::Method::SVD:
-                svd(args);
+                svd(args.value(), vulkan, input, reference);
                 break;
             case IQM::Method::FSIM:
-                fsim(args);
+                fsim(args.value(), vulkan, input, reference);
                 break;
             case IQM::Method::FLIP:
-                flip(args);
+                flip(args.value(), vulkan, input, reference);
                 break;
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;
-        exit(-1);
+        return -1;
     }
 
     return 0;

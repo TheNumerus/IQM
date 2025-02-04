@@ -4,6 +4,7 @@
  */
 
 #include "methods.h"
+#include <stdexcept>
 
 namespace IQM {
     std::string method_name(const Method &method) {

@@ -3,25 +3,25 @@
  * Petr Volf - 2025
  */
 
-#ifndef IQM_ARGS_H
-#define IQM_ARGS_H
+#ifndef IQM_PROFILEARGS_H
+#define IQM_PROFILEARGS_H
 
-#include "methods.h"
+#include "../shared/methods.h"
 #include <optional>
-#include <stdexcept>
 #include <unordered_map>
 
 namespace IQM {
-    class Args {
+    class ProfileArgs {
     public:
-        Args(unsigned argc, const char* argv[]);
+        ProfileArgs(unsigned argc, const char* argv[]);
         Method method;
         std::string inputPath;
         std::string refPath;
-        std::optional<std::string> outputPath;
         std::unordered_map<std::string, std::string> options;
+        std::optional<unsigned int> iterations;
         bool verbose = false;
+        bool printHelp = false;
     };
 }
 
-#endif //IQM_ARGS_H
+#endif //IQM_PROFILEARGS_H

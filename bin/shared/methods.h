@@ -7,7 +7,6 @@
 #define IQM_METHODS_H
 
 #include <string>
-#include <stdexcept>
 
 namespace IQM {
     enum class Method {
