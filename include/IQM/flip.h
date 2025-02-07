@@ -3,48 +3,73 @@
  * Petr Volf - 2025
  */
 
-#ifndef FLIP_H
-#define FLIP_H
+#ifndef IQM_FLIP_H
+#define IQM_FLIP_H
 
 #include <IQM/flip/color_pipeline.h>
-#include <IQM/input_image.h>
-#include <IQM/base/img_params.h>
-#include <../../bin/shared/timestamps.h>
 #include <IQM/base/vulkan_runtime.h>
 
-namespace IQM::GPU {
-    struct FLIPResult {
-        float mean_flip;
-        Timestamps timestamps;
-    };
-
+namespace IQM {
     struct FLIPArguments {
         float monitor_resolution_x = 2560;
         float monitor_distance = 0.7;
         float monitor_width = 0.6;
     };
 
+    /**
+     * Input parameters for FLIP computation.
+     *
+     * Source image views `ivTest` and `ivRef` are expected to be views into RGBA u8 images of WxH.
+     * Rest of image views are expected to be in R f32 format with dimensions WxH.
+     * All images should be in layout GENERAL.
+     *
+     *    W x H x  4 std::shared_ptr<VulkanImage> imageInput;
+          W x H x  4 std::shared_ptr<VulkanImage> imageRef;
+          W x H x 16 std::shared_ptr<VulkanImage> imageYccInput;
+          W x H x 16 std::shared_ptr<VulkanImage> imageYccRef;
+          W x H x 16 std::shared_ptr<VulkanImage> imageFilterTempInput;
+          W x H x 16 std::shared_ptr<VulkanImage> imageFilterTempRef;
+          W x H x  4 std::shared_ptr<VulkanImage> imageFeatureError;
+        256 x 1 x 16 std::shared_ptr<VulkanImage> imageColorMap;
+          K x 1 x 16 std::shared_ptr<VulkanImage> imageFeatureFilters;
+          W x H x 16 std::shared_ptr<VulkanImage> imageOut;
+          S x S x 16 std::shared_ptr<VulkanImage> csfFilter;
+          W x H x 16 std::shared_ptr<VulkanImage> inputPrefilterTemp;
+          W x H x 16 std::shared_ptr<VulkanImage> refPrefilterTemp;
+          W x H x 16 std::shared_ptr<VulkanImage> inputPrefilter;
+          W x H x 16 std::shared_ptr<VulkanImage> refPrefilter;
+          W x H x  4 std::shared_ptr<VulkanImage> imageColorError;
+     */
+    struct FLIPInput {
+        const FLIPArguments args;
+        const vk::raii::Device *device;
+        const vk::raii::CommandBuffer *cmdBuf;
+        const vk::raii::ImageView *ivTest, *ivRef, *ivOut, *ivColorMap, *ivFeatErr, *ivColorErr, *ivFeatFilter, *ivColorFilter;
+        const vk::raii::ImageView *ivTemp[8];
+        const vk::raii::Image *imgOut;
+        const vk::raii::Buffer *bufMean;
+        unsigned width, height;
+    };
+
     class FLIP {
     public:
         explicit FLIP(const vk::raii::Device &device);
-        FLIPResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref, const FLIPArguments &args);
+        void computeMetric(const FLIPInput& input);
+
+        float static pixelsPerDegree(const FLIPArguments &args);
+        unsigned static spatialKernelSize(const FLIPArguments &args);
+        unsigned static featureKernelSize(const FLIPArguments &args);
 
     private:
-        void prepareImageStorage(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref, int kernel_size);
-        void convertToYCxCz(const VulkanRuntime &runtime);
-        void createFeatureFilters(const VulkanRuntime &runtime, float pixels_per_degree, int kernel_size);
-        void computeFeatureErrorMap(const VulkanRuntime &runtime);
-        void computeFinalErrorMap(const VulkanRuntime & runtime);
-
-        void startTransferCommandList(const VulkanRuntime &runtime);
-        void endTransferCommandList(const VulkanRuntime &runtime);
-        void setUpDescriptors(const VulkanRuntime & runtime);
+        void convertToYCxCz(const FLIPInput& input);
+        void createFeatureFilters(const FLIPInput& input);
+        void computeFeatureErrorMap(const FLIPInput& input);
+        void computeFinalErrorMap(const FLIPInput& input);
+        void setUpDescriptors(const FLIPInput& input);
 
         vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
 
         FLIPColorPipeline colorPipeline;
-
-        ImageParameters imageParameters;
 
         vk::raii::PipelineLayout inputConvertLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline inputConvertPipeline = VK_NULL_HANDLE;
@@ -70,32 +95,7 @@ namespace IQM::GPU {
         vk::raii::Pipeline errorCombinePipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout errorCombineDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet errorCombineDescSet = VK_NULL_HANDLE;
-
-        vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
-        vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
-        vk::raii::Fence transferFence = VK_NULL_HANDLE;
-
-        vk::raii::Buffer stgInput = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgInputMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer stgRef = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer stgColorMap = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgColorMapMemory = VK_NULL_HANDLE;
-
-        std::shared_ptr<VulkanImage> imageInput;
-        std::shared_ptr<VulkanImage> imageRef;
-        std::shared_ptr<VulkanImage> imageYccInput;
-        std::shared_ptr<VulkanImage> imageYccRef;
-        std::shared_ptr<VulkanImage> imageFilterTempInput;
-        std::shared_ptr<VulkanImage> imageFilterTempRef;
-        std::shared_ptr<VulkanImage> imageFeatureError;
-
-        std::shared_ptr<VulkanImage> imageColorMap;
-
-        std::shared_ptr<VulkanImage> imageFeatureFilters;
-
-        std::shared_ptr<VulkanImage> imageOut;
     };
 }
 
-#endif //FLIP_H
+#endif //IQM_FLIP_H

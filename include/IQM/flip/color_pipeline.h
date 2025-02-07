@@ -3,23 +3,21 @@
  * Petr Volf - 2025
  */
 
-#ifndef FLIPCOLORPIPELINE_H
-#define FLIPCOLORPIPELINE_H
+#ifndef IQM_FLIP_COLORPIPELINE_H
+#define IQM_FLIP_COLORPIPELINE_H
 
 #include <IQM/base/vulkan_runtime.h>
-#include <IQM/base/img_params.h>
 
-namespace IQM::GPU {
+namespace IQM {
+    struct FLIPInput;
+
     class FLIPColorPipeline {
     public:
         explicit FLIPColorPipeline(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void prefilter(const VulkanRuntime &runtime, ImageParameters params, float pixels_per_degree);
-        void computeErrorMap(const VulkanRuntime &runtime, ImageParameters params);
+        void prefilter(const FLIPInput& input, float pixels_per_degree);
+        void computeErrorMap(const FLIPInput& input);
 
-        void prepareStorage(const VulkanRuntime &runtime, int spatial_kernel_size, ImageParameters params);
-        void setUpDescriptors(const VulkanRuntime &runtime, const std::shared_ptr<VulkanImage> &inputYcc, const std::shared_ptr<VulkanImage> &refYcc);
-
-        std::shared_ptr<VulkanImage> imageColorError;
+        void setUpDescriptors(const FLIPInput& input);
     private:
         vk::raii::PipelineLayout csfPrefilterLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline csfPrefilterPipeline = VK_NULL_HANDLE;
@@ -32,15 +30,7 @@ namespace IQM::GPU {
         vk::raii::Pipeline spatialDetectPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout spatialDetectDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet spatialDetectDescSet = VK_NULL_HANDLE;
-
-        std::shared_ptr<VulkanImage> csfFilter;
-
-        std::shared_ptr<VulkanImage> inputPrefilterTemp;
-        std::shared_ptr<VulkanImage> refPrefilterTemp;
-
-        std::shared_ptr<VulkanImage> inputPrefilter;
-        std::shared_ptr<VulkanImage> refPrefilter;
     };
 }
 
-#endif //FLIPCOLORPIPELINE_H
+#endif //IQM_FLIP_COLORPIPELINE_H

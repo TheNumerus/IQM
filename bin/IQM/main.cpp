@@ -27,45 +27,9 @@
 #endif
 
 #if COMPILE_FLIP
-#include <IQM/flip.h>
+#include "wrappers/flip.h"
 #endif
-/*
-void ssim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const IQM::InputImage& input, const IQM::InputImage& reference) {
-#ifdef COMPILE_SSIM
-    IQM::SSIM ssim(vulkan._device);
 
-    // starts only in debug, needs to init after vulkan
-    initRenderDoc();
-
-    IQM::Timestamps timestamps;
-
-    auto ssimArgs = IQM::SSIMInput {
-        .width = input.width,
-        .height = input.height,
-        .timestamps = &timestamps,
-    };
-
-    auto start = std::chrono::high_resolution_clock::now();
-    ssim.computeMetric(ssimArgs);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // saves capture for debugging
-    finishRenderDoc();
-
-    std::cout << "MSSIM: " << result.mssim << std::endl;
-
-    if (args.verbose) {
-        result.timestamps.print(start, end);
-    }
-
-    if (args.outputPath.has_value()) {
-        IQM::save_float_image(args.outputPath.value(), result.imageData, input.width, input.height);
-    }
-#else
-    throw std::runtime_error("SSIM support was not compiled");
-#endif
-}
-*/
 /*
 void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
 #ifdef COMPILE_SVD
@@ -216,15 +180,23 @@ int main(const int argc, const char **argv) {
                 break;
             case IQM::Method::CW_SSIM_CPU:
                 throw std::runtime_error("CW-SSIM is not implemented");
-            /*case IQM::Method::SVD:
-                svd(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
+            case IQM::Method::SVD:
+#ifdef COMPILE_SVD
+                IQM::Bin::svd_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("M-SVD support is not compiled");
+#endif
                 break;
             case IQM::Method::FSIM:
-                fsim(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
+                //fsim(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
                 break;
             case IQM::Method::FLIP:
-                flip(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
-                break;*/
+#ifdef COMPILE_FLIP
+                flip_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("FLIP support is not compiled");
+#endif
+                break;
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

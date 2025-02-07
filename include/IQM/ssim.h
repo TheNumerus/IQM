@@ -12,7 +12,7 @@ namespace IQM {
     /**
      * Input parameters for SSIM computation.
      *
-     * Source image views `imgVSrc` and `imgVRef` are expected to be views into RGBA u8 images of WxH.
+     * Source image views `ivTest` and `ivRef` are expected to be views into RGBA u8 images of WxH.
      * Rest of image views are expected to be in R f32 format with dimensions WxH.
      * All images should be in layout GENERAL.
      *
@@ -33,7 +33,7 @@ namespace IQM {
     class SSIM {
     public:
         explicit SSIM(const vk::raii::Device &device);
-        void computeMetric(SSIMInput& input);
+        void computeMetric(const SSIMInput& input);
 
         int kernelSize = 11;
         float k_1 = 0.01;
@@ -62,7 +62,7 @@ namespace IQM {
         vk::raii::DescriptorSetLayout descSetLayoutMssim = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetMssim = VK_NULL_HANDLE;
 
-        void initDescriptors(SSIMInput& input);
+        void initDescriptors(const SSIMInput& input);
     };
 }
 

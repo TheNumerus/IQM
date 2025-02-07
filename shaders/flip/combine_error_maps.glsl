@@ -27,7 +27,8 @@ void main() {
 
     float value = pow(deltaEc, 1.0 - deltaEf);
 
-    vec4 color = imageLoad(color_map, ivec2(int(floor(value * 255.0)), 0));
+    int colorMax = imageSize(color_map).x - 1;
+    vec4 color = imageLoad(color_map, ivec2(int(floor(value * colorMax)), 0));
 
     imageStore(output_img, pos, color);
 }

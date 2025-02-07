@@ -1,6 +1,3 @@
-cmake_minimum_required(VERSION 3.29)
-project(IQM-FLIP)
-
 add_library(IQM-FLIP STATIC flip.cpp
         flip_color_pipeline.cpp
 )
@@ -10,8 +7,8 @@ add_library(IQM::FLIP ALIAS IQM-FLIP)
 find_package(Vulkan REQUIRED)
 
 target_include_directories(IQM-FLIP
-        PRIVATE "../../../include"
-        PRIVATE "../../../shaders_out"
+        PRIVATE "../../include"
+        PRIVATE "../../shaders_out"
 )
 
 target_link_libraries(IQM-FLIP PUBLIC Vulkan::Vulkan IQM::LibBase)

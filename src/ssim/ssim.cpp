@@ -96,7 +96,7 @@ IQM::SSIM::SSIM(const vk::raii::Device &device) {
     this->pipelineMssim = VulkanRuntime::createComputePipeline(device, smMssim, this->layoutMssim);
 }
 
-void IQM::SSIM::computeMetric(SSIMInput &input) {
+void IQM::SSIM::computeMetric(const SSIMInput &input) {
     this->initDescriptors(input);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineLumapack);
@@ -241,7 +241,7 @@ void IQM::SSIM::computeMetric(SSIMInput &input) {
     }
 }
 
-void IQM::SSIM::initDescriptors(SSIMInput &input) {
+void IQM::SSIM::initDescriptors(const SSIMInput &input) {
     const unsigned sizeTrimmed = (input.width - this->kernelSize + 1) * (input.height - this->kernelSize + 1) * sizeof(float);
 
     const auto imageInfosIntermediate = VulkanRuntime::createImageInfos({
@@ -253,7 +253,7 @@ void IQM::SSIM::initDescriptors(SSIMInput &input) {
     });
     const auto outImageInfos = VulkanRuntime::createImageInfos({input.ivOut});
 
-    const auto inputImageInfos = VulkanRuntime::createImageInfos((std::vector<const vk::raii::ImageView*>){
+    const auto inputImageInfos = VulkanRuntime::createImageInfos({
         input.ivTest,
         input.ivRef,
     });

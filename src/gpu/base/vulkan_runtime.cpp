@@ -523,7 +523,7 @@ vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const vk
 
     return vk::raii::DescriptorSetLayout {device, info};
 }
-
+/*
 std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<std::shared_ptr<VulkanImage>> &images) {
     std::vector<vk::DescriptorImageInfo> vec(images.size());
 
@@ -536,7 +536,7 @@ std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(c
     }
 
     return vec;
-}
+}*/
 
 std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<const vk::raii::ImageView*> &images) {
     std::vector<vk::DescriptorImageInfo> vec(images.size());
