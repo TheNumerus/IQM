@@ -7,7 +7,7 @@
 #include <cstring>
 #include <stdexcept>
 
-IQM::Args::Args(const unsigned argc, const char *argv[]) {
+IQM::Bin::Args::Args(const unsigned argc, const char *argv[]) {
     bool parsedMethod = false;
     bool parsedInput = false;
     bool parsedReference = false;

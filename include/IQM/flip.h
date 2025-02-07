@@ -9,7 +9,7 @@
 #include <IQM/flip/color_pipeline.h>
 #include <IQM/input_image.h>
 #include <IQM/base/img_params.h>
-#include <IQM/timestamps.h>
+#include <../../bin/shared/timestamps.h>
 #include <IQM/base/vulkan_runtime.h>
 
 namespace IQM::GPU {

@@ -10,7 +10,7 @@
 #include <optional>
 #include <unordered_map>
 
-namespace IQM {
+namespace IQM::Bin {
     class Args {
     public:
         Args(unsigned argc, const char* argv[]);

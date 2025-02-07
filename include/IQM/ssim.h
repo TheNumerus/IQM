@@ -1,39 +1,45 @@
 /*
  * Image Quality Metrics
- * Petr Volf - 2024
+ * Petr Volf - 2025
  */
 
 #ifndef SSIM_H
 #define SSIM_H
 
-#include <vector>
-
-#include <IQM/input_image.h>
-#include <IQM/base/img_params.h>
 #include <IQM/base/vulkan_runtime.h>
-#include <IQM/timestamps.h>
 
-namespace IQM::GPU {
-    struct SSIMResult {
-        std::vector<float> imageData;
-        unsigned int width;
-        unsigned int height;
-        float mssim;
-        Timestamps timestamps;
+namespace IQM {
+    /**
+     * Input parameters for SSIM computation.
+     *
+     * Source image views `imgVSrc` and `imgVRef` are expected to be views into RGBA u8 images of WxH.
+     * Rest of image views are expected to be in R f32 format with dimensions WxH.
+     * All images should be in layout GENERAL.
+     *
+     * Buffer should have size of WxHx4 bytes.
+     *
+     * After the computation the resulting graphical measure is in `imgOut`.
+     * MSSIM result is on the zero-th index of `bufMssim`.
+     */
+    struct SSIMInput {
+        const vk::raii::Device *device;
+        const vk::raii::CommandBuffer *cmdBuf;
+        const vk::raii::ImageView *ivTest, *ivRef, *ivMeanTest, *ivMeanRef, *ivVarTest, *ivVarRef, *ivCovar, *ivOut;
+        const vk::raii::Image *imgOut;
+        const vk::raii::Buffer *bufMssim;
+        unsigned width, height;
     };
 
     class SSIM {
     public:
         explicit SSIM(const vk::raii::Device &device);
-        SSIMResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
+        void computeMetric(SSIMInput& input);
 
         int kernelSize = 11;
         float k_1 = 0.01;
         float k_2 = 0.03;
         float sigma = 1.5;
     private:
-        ImageParameters imageParameters;
-
         vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout layoutSsim = VK_NULL_HANDLE;
@@ -56,29 +62,7 @@ namespace IQM::GPU {
         vk::raii::DescriptorSetLayout descSetLayoutMssim = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetMssim = VK_NULL_HANDLE;
 
-        vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
-        vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
-
-        vk::raii::Fence transferFence = VK_NULL_HANDLE;
-        vk::raii::Buffer stgInput = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgInputMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer stgRef = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer mssimBuf = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory mssimMemory = VK_NULL_HANDLE;
-
-        // RGBA u8 input images
-        std::shared_ptr<VulkanImage> imageInput;
-        std::shared_ptr<VulkanImage> imageRef;
-
-        // R f32 intermediate images
-        std::vector<std::shared_ptr<VulkanImage>> imagesBlurred;
-        std::shared_ptr<VulkanImage> imageBlurredTemp;
-
-        // R f32 output image
-        std::shared_ptr<VulkanImage> imageOut;
-
-        void prepareImages(const VulkanRuntime &runtime, Timestamps& timestamps, const InputImage &image, const InputImage &ref);
+        void initDescriptors(SSIMInput& input);
     };
 }
 

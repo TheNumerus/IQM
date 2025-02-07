@@ -6,15 +6,16 @@
 #include <iostream>
 #include <chrono>
 
-#include <IQM/base/vulkan_runtime.h>
-#include <IQM/input_image.h>
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include "args.h"
-#include "../shared/debug_utils.h"
-#include "../shared/io.h"
+#include "file_matcher.h"
+#include "vulkan_instance.h"
 
 #if COMPILE_SSIM
-#include <IQM/ssim.h>
+#include "wrappers/ssim.h"
 #endif
 
 #if COMPILE_SVD
@@ -28,16 +29,24 @@
 #if COMPILE_FLIP
 #include <IQM/flip.h>
 #endif
-
-void ssim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
+/*
+void ssim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const IQM::InputImage& input, const IQM::InputImage& reference) {
 #ifdef COMPILE_SSIM
-    IQM::GPU::SSIM ssim(vulkan._device);
+    IQM::SSIM ssim(vulkan._device);
 
     // starts only in debug, needs to init after vulkan
     initRenderDoc();
 
+    IQM::Timestamps timestamps;
+
+    auto ssimArgs = IQM::SSIMInput {
+        .width = input.width,
+        .height = input.height,
+        .timestamps = &timestamps,
+    };
+
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = ssim.computeMetric(vulkan, input, reference);
+    ssim.computeMetric(ssimArgs);
     auto end = std::chrono::high_resolution_clock::now();
 
     // saves capture for debugging
@@ -50,14 +59,15 @@ void ssim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const In
     }
 
     if (args.outputPath.has_value()) {
-        save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
+        IQM::save_float_image(args.outputPath.value(), result.imageData, input.width, input.height);
     }
 #else
     throw std::runtime_error("SSIM support was not compiled");
 #endif
 }
-
-void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
+*/
+/*
+void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
 #ifdef COMPILE_SVD
     IQM::GPU::SVD svd(vulkan._device);
 
@@ -65,7 +75,7 @@ void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const Inp
     initRenderDoc();
 
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = svd.computeMetric(vulkan, input, reference);
+    auto result = svd.computeMetric(vulkan, &input, &reference);
     auto end = std::chrono::high_resolution_clock::now();
 
     // saves capture for debugging
@@ -78,14 +88,14 @@ void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const Inp
     }
 
     if (args.outputPath.has_value()) {
-        save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
+        IQM::save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
     }
 #else
     throw std::runtime_error("SVD support was not compiled");
 #endif
 }
 
-void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
+void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
 #ifdef COMPILE_FSIM
     IQM::GPU::FSIM fsim(vulkan._device);
 
@@ -93,7 +103,7 @@ void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const In
     initRenderDoc();
 
     auto start = std::chrono::high_resolution_clock::now();
-    auto result = fsim.computeMetric(vulkan, input, reference);
+    auto result = fsim.computeMetric(vulkan, &input, &reference);
     auto end = std::chrono::high_resolution_clock::now();
 
     // saves capture for debugging
@@ -109,7 +119,7 @@ void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const In
 #endif
 }
 
-void flip(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage& input, const InputImage& reference) {
+void flip(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
 #ifdef COMPILE_FLIP
     IQM::GPU::FLIP flip(vulkan._device);
 
@@ -146,7 +156,7 @@ void flip(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const In
 #else
     throw std::runtime_error("FLIP support was not compiled");
 #endif
-}
+}*/
 
 void printHelp() {
     std::cout << "IQM - Application for computing image quality metrics.\n"
@@ -167,10 +177,10 @@ void printHelp() {
 }
 
 int main(const int argc, const char **argv) {
-    std::optional<IQM::Args> args;
+    std::optional<IQM::Bin::Args> args;
 
     try {
-        args = IQM::Args(argc, argv);
+        args = IQM::Bin::Args(argc, argv);
     } catch (std::exception& e) {
         std::cout << "Error parsing arguments: " << e.what() << std::endl;
         printHelp();
@@ -186,14 +196,10 @@ int main(const int argc, const char **argv) {
         std::cout << "Selected method: " << IQM::method_name(args->method) << std::endl;
     }
 
-    const auto input = load_image(args->inputPath);
-    const auto reference = load_image(args->refPath);
+    IQM::Bin::FileMatcher matcher;
+    const auto matches = matcher.match(args.value());
 
-    if (input.width != reference.width || input.height != reference.height) {
-        throw std::runtime_error("Compared images must have the same size");
-    }
-
-    const IQM::GPU::VulkanRuntime vulkan;
+    const IQM::Bin::VulkanInstance vulkan;
 
     if (args->verbose) {
         std::cout << "Selected device: "<< vulkan.selectedDevice << std::endl;
@@ -202,19 +208,23 @@ int main(const int argc, const char **argv) {
     try {
         switch (args->method) {
             case IQM::Method::SSIM:
-                ssim(args.value(), vulkan, input, reference);
+#ifdef COMPILE_SSIM
+                IQM::Bin::ssim_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("SSIM support is not compiled");
+#endif
                 break;
             case IQM::Method::CW_SSIM_CPU:
                 throw std::runtime_error("CW-SSIM is not implemented");
-            case IQM::Method::SVD:
-                svd(args.value(), vulkan, input, reference);
+            /*case IQM::Method::SVD:
+                svd(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
                 break;
             case IQM::Method::FSIM:
-                fsim(args.value(), vulkan, input, reference);
+                fsim(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
                 break;
             case IQM::Method::FLIP:
-                flip(args.value(), vulkan, input, reference);
-                break;
+                flip(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
+                break;*/
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

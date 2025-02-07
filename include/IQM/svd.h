@@ -11,7 +11,7 @@
 
 #include <IQM/input_image.h>
 #include <IQM/base/vulkan_runtime.h>
-#include <IQM/timestamps.h>
+#include <../../bin/shared/timestamps.h>
 
 namespace IQM::GPU {
     struct SVDResult {

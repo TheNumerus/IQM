@@ -538,6 +538,20 @@ std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(c
     return vec;
 }
 
+std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<const vk::raii::ImageView*> &images) {
+    std::vector<vk::DescriptorImageInfo> vec(images.size());
+
+    for (size_t i = 0; i < vec.size(); i++) {
+        vec[i] = vk::DescriptorImageInfo {
+            .sampler = nullptr,
+            .imageView = *images[i],
+            .imageLayout = vk::ImageLayout::eGeneral,
+        };
+    }
+
+    return vec;
+}
+
 void IQM::GPU::VulkanRuntime::waitForFence(const vk::raii::Fence &fence) const {
     auto res = this->_device.waitForFences({fence}, true, std::numeric_limits<uint64_t>::max());
     if (res != vk::Result::eSuccess) {

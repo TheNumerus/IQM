@@ -1,4 +1,4 @@
-add_executable(IQM IQM/main.cpp IQM/args.cpp shared/methods.cpp)
+add_executable(IQM IQM/main.cpp IQM/args.cpp IQM/file_matcher.cpp IQM/vulkan_instance.cpp shared/methods.cpp shared/vulkan_res.cpp)
 add_executable(IQM::IQM ALIAS IQM)
 
 target_include_directories(IQM PUBLIC ../include)
@@ -22,6 +22,7 @@ endif ()
 if (SSIM)
     target_compile_definitions(IQM PRIVATE -DCOMPILE_SSIM)
     target_compile_definitions(IQM-profile PRIVATE -DCOMPILE_SSIM)
+    target_sources(IQM PRIVATE IQM/wrappers/ssim.cpp)
     target_link_libraries(IQM IQM::SSIM)
     target_link_libraries(IQM-profile IQM::SSIM)
 endif ()

@@ -8,7 +8,7 @@
 #include <vkFFT.h>
 
 #include <IQM/input_image.h>
-#include <IQM/timestamps.h>
+#include <../../bin/shared/timestamps.h>
 #include <IQM/base/vulkan_runtime.h>
 #include <IQM/fsim/log_gabor.h>
 #include <IQM/fsim/lowpass_filter.h>
