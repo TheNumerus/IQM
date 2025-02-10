@@ -58,7 +58,7 @@ IQM::ProfileArgs::ProfileArgs(const unsigned argc, const char *argv[]) {
             continue;
         }
 
-        if (strcmp(argv[i], "--iterations") == 0) {
+        if (strcmp(argv[i], "--iterations") == 0 || strcmp(argv[i], "-i") == 0) {
             if (i + 1 >= argc) {
                 throw std::invalid_argument("Missing iterations argument");
             }

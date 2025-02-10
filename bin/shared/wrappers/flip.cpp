@@ -9,8 +9,10 @@
 #include "../../shared/vulkan_res.h"
 #include "IQM/flip/viridis.h"
 
+using IQM::VulkanInstance;
+
 void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches) {
-    IQM::FLIP flip(instance.device);
+    IQM::FLIP flip(*instance.device());
 
     FLIPArguments flipArgs;
     if (args.options.contains("--flip-width")) {
@@ -56,8 +58,8 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
 
             auto flipInput = IQM::FLIPInput {
                 .args = flipArgs,
-                .device = &instance.device,
-                .cmdBuf = &*instance.cmd_buffer,
+                .device = instance.device(),
+                .cmdBuf = &*instance.cmdBuf(),
                 .ivTest = &res.imageInput->imageView,
                 .ivRef = &res.imageRef->imageView,
                 .ivOut = &res.imageOut->imageView,
@@ -85,14 +87,14 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
             const vk::CommandBufferBeginInfo beginInfo = {
                 .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
             };
-            instance.cmd_buffer->begin(beginInfo);
+            instance.cmdBuf()->begin(beginInfo);
 
             flip.computeMetric(flipInput);
 
-            instance.cmd_buffer->end();
+            instance.cmdBuf()->end();
 
             const std::vector cmdBufs = {
-                &**instance.cmd_buffer
+                &**instance.cmdBuf()
             };
 
             auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
@@ -106,10 +108,10 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
                 .pSignalSemaphores = &*res.computeDone
             };
 
-            instance.queue->submit(submitInfo, {});
+            instance.queue()->submit(submitInfo, {});
             timestamps.mark("submit compute GPU pipeline");
             // wait so cmd buffer can be reused for GPU -> CPU transfer
-            VulkanInstance::waitForFence(instance.device, res.transferFence);
+            instance.waitForFence(res.transferFence);
 
             auto result = flip_copy_back(instance, res, timestamps);
 
@@ -137,6 +139,113 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
     std::cout << "Processed " << processed << "/" << imageMatches.size() <<" images" << std::endl;
 }
 
+void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::FLIP &flip, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
+    FLIPArguments flipArgs;
+    if (args.options.contains("--flip-width")) {
+        flipArgs.monitor_width = std::stof(args.options.at("--flip-width"));
+    }
+    if (args.options.contains("--flip-res")) {
+        flipArgs.monitor_resolution_x = std::stof(args.options.at("--flip-res"));
+    }
+    if (args.options.contains("--flip-distance")) {
+        flipArgs.monitor_distance = std::stof(args.options.at("--flip-distance"));
+    }
+
+    if (args.verbose) {
+        std::cout << "FLIP monitor resolution: "<< flipArgs.monitor_resolution_x << std::endl
+        << "FLIP monitor distance: "<< flipArgs.monitor_distance << std::endl
+        << "FLIP monitor width: "<< flipArgs.monitor_width << std::endl;
+    }
+
+    unsigned spatialKernelSize = IQM::FLIP::spatialKernelSize(flipArgs);
+    unsigned featureKernelSize = IQM::FLIP::featureKernelSize(flipArgs);
+
+    try {
+        Timestamps timestamps;
+        auto start = std::chrono::high_resolution_clock::now();
+
+        timestamps.mark("images loaded");
+
+        initRenderDoc();
+
+        auto res = flip_init_res(input, ref, instance, spatialKernelSize, featureKernelSize);
+        timestamps.mark("resources allocated");
+
+        flip_upload(instance, res);
+
+        auto flipInput = IQM::FLIPInput {
+            .args = flipArgs,
+            .device = instance.device(),
+            .cmdBuf = &*instance.cmdBuf(),
+            .ivTest = &res.imageInput->imageView,
+            .ivRef = &res.imageRef->imageView,
+            .ivOut = &res.imageOut->imageView,
+            .ivColorMap = &res.imageColorMap->imageView,
+            .ivFeatErr = &res.imagesFloatTemp[0]->imageView,
+            .ivColorErr = &res.imagesFloatTemp[1]->imageView,
+            .ivFeatFilter = &res.imageFeatureFilter->imageView,
+            .ivColorFilter = &res.imageColorFilter->imageView,
+            .ivTemp = {
+                &res.imagesColorTemp[0]->imageView,
+                &res.imagesColorTemp[1]->imageView,
+                &res.imagesColorTemp[2]->imageView,
+                &res.imagesColorTemp[3]->imageView,
+                &res.imagesColorTemp[4]->imageView,
+                &res.imagesColorTemp[5]->imageView,
+                &res.imagesColorTemp[6]->imageView,
+                &res.imagesColorTemp[7]->imageView,
+            },
+            .imgOut = &res.imageOut->image,
+            .bufMean = &res.meanBuf,
+            .width = input.width,
+            .height = input.height
+        };
+
+        const vk::CommandBufferBeginInfo beginInfo = {
+            .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+        };
+        instance.cmdBuf()->begin(beginInfo);
+
+        flip.computeMetric(flipInput);
+
+        instance.cmdBuf()->end();
+
+        const std::vector cmdBufs = {
+            &**instance.cmdBuf()
+        };
+
+        auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
+        const vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*res.uploadDone,
+            .pWaitDstStageMask = &mask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = *cmdBufs.data(),
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*res.computeDone
+        };
+
+        instance.queue()->submit(submitInfo, {});
+        timestamps.mark("submit compute GPU pipeline");
+        // wait so cmd buffer can be reused for GPU -> CPU transfer
+        instance.waitForFence(res.transferFence);
+
+        auto result = flip_copy_back(instance, res, timestamps);
+
+        finishRenderDoc();
+
+        timestamps.mark("output saved");
+
+        const auto end = std::chrono::high_resolution_clock::now();
+        std::cout << args.inputPath << ": " << result.meanFlip << std::endl;
+        if (args.verbose) {
+            timestamps.print(start, end);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to process '" << args.inputPath << "': " << e.what() << std::endl;
+    }
+}
+
 IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance &instance, unsigned spatialKernelSize, unsigned featureKernelSize) {
     // always 4 channels on input, with 1B per channel
     // add 1 float to end so buffer can be reused for writeback from GPU
@@ -144,29 +253,29 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
     const auto size = (test.width * test.height ) * sizeof(float);
     const auto colormapSize = 256 * 4 * sizeof(float);
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         outSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostCached
     );
     auto [stgRefBuf, stgRefMem] = VulkanResource::createBuffer(
-    instance.device,
-    instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
     auto [cmBuf, cmMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         colormapSize,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
     auto [meanBuf, meanMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         size,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -228,21 +337,21 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
     colorMapImageInfo.extent = vk::Extent3D(256, 1, 1);
     colorMapImageInfo.format = vk::Format::eR32G32B32A32Sfloat;
 
-    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
-    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
-    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, colorImageInfo));
-    auto const imageColorFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, spatialImageInfo));
-    auto const imageFeatureFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, featureImageInfo));
-    auto const imageColorMap = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, colorMapImageInfo));
+    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
+    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
+    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo));
+    auto const imageColorFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), spatialImageInfo));
+    auto const imageFeatureFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), featureImageInfo));
+    auto const imageColorMap = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorMapImageInfo));
     auto imagesColorTemp = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesFloatTemp = std::vector<std::shared_ptr<VulkanImage>>();
 
     for (int i = 0; i < 8; i++) {
-        imagesColorTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, colorImageInfo)));
+        imagesColorTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo)));
     }
 
     for (int i = 0; i < 2; i++) {
-        imagesFloatTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, floatImageInfo)));
+        imagesFloatTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo)));
     }
 
     return FLIPResources{
@@ -262,9 +371,9 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
         .imageFeatureFilter = imageFeatureFilter,
         .imageColorMap = imageColorMap,
         .imageOut = imageOut,
-        .uploadDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .computeDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .transferFence = instance.device.createFence(vk::FenceCreateInfo{}),
+        .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
     };
 }
 
@@ -272,7 +381,7 @@ void IQM::Bin::flip_upload(const VulkanInstance &instance, const FLIPResources &
     const vk::CommandBufferBeginInfo beginInfo = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfo);
+    instance.cmdBufTransfer()->begin(beginInfo);
 
     std::vector imagesToInit = {
         res.imageInput,
@@ -287,7 +396,7 @@ void IQM::Bin::flip_upload(const VulkanInstance &instance, const FLIPResources &
     imagesToInit.insert(imagesToInit.end(), res.imagesColorTemp.begin(), res.imagesColorTemp.end());
     imagesToInit.insert(imagesToInit.end(), res.imagesFloatTemp.begin(), res.imagesFloatTemp.end());
 
-    VulkanResource::initImages(*instance.cmd_bufferTransfer, imagesToInit);
+    VulkanResource::initImages(*instance.cmdBufTransfer(), imagesToInit);
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -305,14 +414,14 @@ void IQM::Bin::flip_upload(const VulkanInstance &instance, const FLIPResources &
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{256, 1, 1}
     };
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgColormap, res.imageColorMap->image,  vk::ImageLayout::eGeneral, copyColorMapRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgColormap, res.imageColorMap->image,  vk::ImageLayout::eGeneral, copyColorMapRegion);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     const vk::SubmitInfo submitInfoCopy{
@@ -322,7 +431,7 @@ void IQM::Bin::flip_upload(const VulkanInstance &instance, const FLIPResources &
         .pSignalSemaphores = &*res.uploadDone
     };
 
-    instance.transferQueue->submit(submitInfoCopy, res.transferFence);
+    instance.queueTransfer()->submit(submitInfoCopy, res.transferFence);
 }
 
 IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, const FLIPResources &res, Timestamps &timestamps) {
@@ -332,7 +441,7 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
     const vk::CommandBufferBeginInfo beginInfoCopy = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfoCopy);
+    instance.cmdBufTransfer()->begin(beginInfoCopy);
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -342,18 +451,18 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageOut->width, res.imageOut->height, 1}
     };
-    instance.cmd_bufferTransfer->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    instance.cmdBufTransfer()->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
         .dstOffset = sizeof(float) * (res.imageOut->width * res.imageOut->height * 4),
         .size = sizeof(float),
     };
-    instance.cmd_bufferTransfer->copyBuffer(res.meanBuf, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.meanBuf, res.stgInput, bufCopy);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     auto maskCopy = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eTransfer};
@@ -365,10 +474,10 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
         .pCommandBuffers = *cmdBufsCopy.data()
     };
 
-    const vk::raii::Fence fenceCopy{instance.device, vk::FenceCreateInfo{}};
+    const vk::raii::Fence fenceCopy{*instance.device(), vk::FenceCreateInfo{}};
 
-    instance.transferQueue->submit(submitInfoCopy, *fenceCopy);
-    instance.device.waitIdle();
+    instance.queueTransfer()->submit(submitInfoCopy, *fenceCopy);
+    instance.device()->waitIdle();
 
     timestamps.mark("end GPU work");
 

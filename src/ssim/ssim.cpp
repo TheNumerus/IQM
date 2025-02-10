@@ -26,7 +26,6 @@ static std::vector<uint32_t> srcMssim =
 ;
 
 using IQM::GPU::VulkanRuntime;
-using IQM::GPU::VulkanImage;
 
 IQM::SSIM::SSIM(const vk::raii::Device &device) {
     const auto smSsim = VulkanRuntime::createShaderModule(device, src);

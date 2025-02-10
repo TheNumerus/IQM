@@ -9,8 +9,10 @@
 #include "../../shared/vulkan_res.h"
 #include <IQM/fsim/fft_planner.h>
 
+using IQM::VulkanInstance;
+
 void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches) {
-    IQM::FSIM fsim(instance.device);
+    IQM::FSIM fsim(*instance.device());
 
     int processed = 0;
 
@@ -38,11 +40,11 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
             fsim_upload(instance, res);
 
             auto flipInput = IQM::FSIMInput {
-                .device = &instance.device,
-                .physicalDevice = &instance.physicalDevice,
-                .queue = &*instance.queue,
-                .commandPool = &*instance.commandPool,
-                .cmdBuf = &*instance.cmd_buffer,
+                .device = instance.device(),
+                .physicalDevice = instance.physicalDevice(),
+                .queue = &*instance.queue(),
+                .commandPool = &*instance.cmdPool(),
+                .cmdBuf = &*instance.cmdBuf(),
                 .fenceFft = &res.fftFence,
                 .fenceIfft = &res.ifftFence,
                 .ivTest = &res.imageInput->imageView,
@@ -120,14 +122,14 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
             const vk::CommandBufferBeginInfo beginInfo = {
                 .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
             };
-            instance.cmd_buffer->begin(beginInfo);
+            instance.cmdBuf()->begin(beginInfo);
 
             fsim.computeMetric(flipInput);
 
-            instance.cmd_buffer->end();
+            instance.cmdBuf()->end();
 
             const std::vector cmdBufs = {
-                &**instance.cmd_buffer
+                &**instance.cmdBuf()
             };
 
             auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
@@ -141,10 +143,10 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                 .pSignalSemaphores = &*res.computeDone
             };
 
-            instance.queue->submit(submitInfo, {});
+            instance.queue()->submit(submitInfo, {});
             timestamps.mark("submit compute GPU pipeline");
             // wait so cmd buffer can be reused for GPU -> CPU transfer
-            VulkanInstance::waitForFence(instance.device, res.transferFence);
+            instance.waitForFence(res.transferFence);
 
             auto result = fsim_copy_back(instance, res, timestamps);
 
@@ -169,21 +171,164 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
     std::cout << "Processed " << processed << "/" << imageMatches.size() <<" images" << std::endl;
 }
 
+void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::FSIM &fsim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
+    try {
+        Timestamps timestamps;
+        auto start = std::chrono::high_resolution_clock::now();
+
+        timestamps.mark("images loaded");
+
+        initRenderDoc();
+
+        auto [dWidth, dHeight] = FSIM::downscaledSize(input.width, input.height);
+        auto histBufSize = FSIM::sortBufSize(dWidth, dHeight);
+
+        auto res = fsim_init_res(input, ref, instance, dWidth, dHeight, histBufSize);
+        timestamps.mark("resources allocated");
+
+        fsim_upload(instance, res);
+
+        auto flipInput = IQM::FSIMInput {
+            .device = instance.device(),
+            .physicalDevice = instance.physicalDevice(),
+            .queue = &*instance.queue(),
+            .commandPool = &*instance.cmdPool(),
+            .cmdBuf = &*instance.cmdBuf(),
+            .fenceFft = &res.fftFence,
+            .fenceIfft = &res.ifftFence,
+            .ivTest = &res.imageInput->imageView,
+            .ivRef = &res.imageRef->imageView,
+            .ivTestDown = &res.imagesColor[0]->imageView,
+            .ivRefDown = &res.imagesColor[1]->imageView,
+            .ivTestGrad = &res.imagesFloat[0]->imageView,
+            .ivRefGrad = &res.imagesFloat[1]->imageView,
+            .ivTestPc = &res.imagesFloat[2]->imageView,
+            .ivRefPc = &res.imagesFloat[3]->imageView,
+            .ivLowpass = &res.imagesFloat[4]->imageView,
+            .ivAngular = {
+                &res.imagesFloat[5]->imageView,
+                &res.imagesFloat[6]->imageView,
+                &res.imagesFloat[7]->imageView,
+                &res.imagesFloat[8]->imageView,
+            },
+            .ivScales = {
+                &res.imagesFloat[9]->imageView,
+                &res.imagesFloat[10]->imageView,
+                &res.imagesFloat[11]->imageView,
+                &res.imagesFloat[12]->imageView,
+            },
+            .ivFilterResponsesTest = {
+                &res.imagesRg[0]->imageView,
+                &res.imagesRg[1]->imageView,
+                &res.imagesRg[2]->imageView,
+                &res.imagesRg[3]->imageView,
+            },
+            .ivFilterResponsesRef = {
+                &res.imagesRg[4]->imageView,
+                &res.imagesRg[5]->imageView,
+                &res.imagesRg[6]->imageView,
+                &res.imagesRg[7]->imageView,
+            },
+            .ivFinalSums = {
+                &res.imagesFloat[13]->imageView,
+                &res.imagesFloat[14]->imageView,
+                &res.imagesFloat[15]->imageView,
+            },
+            .imgFinalSums = {
+                &res.imagesFloat[13]->image,
+                &res.imagesFloat[14]->image,
+                &res.imagesFloat[15]->image,
+            },
+            .bufFft = &res.bufFft,
+            .bufIfft = &res.bufIfft,
+            .bufSort = &res.bufSort,
+            .bufSortTemp = &res.bufSortTemp,
+            .bufSortHist = &res.bufSortHist,
+            .bufNoiseLevels = &res.bufNoiseLevels,
+            .bufNoisePowers = &res.bufNoisePowers,
+            .bufSum = &res.bufSum,
+            .bufOut = &res.bufOut,
+            .bufEnergy = {
+                &res.bufEnergy[0],
+                &res.bufEnergy[1],
+                &res.bufEnergy[2],
+                &res.bufEnergy[3],
+                &res.bufEnergy[4],
+                &res.bufEnergy[5],
+                &res.bufEnergy[6],
+                &res.bufEnergy[7],
+            },
+            .width = input.width,
+            .height = input.height,
+        };
+
+        auto fftApplication = FftPlanner::initForward(flipInput, dWidth, dHeight);
+        auto fftApplicationInverse = FftPlanner::initInverse(flipInput, dWidth, dHeight);
+
+        flipInput.fftApplication = &fftApplication;
+        flipInput.fftApplicationInverse = &fftApplicationInverse;
+
+        const vk::CommandBufferBeginInfo beginInfo = {
+            .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+        };
+        instance.cmdBuf()->begin(beginInfo);
+
+        fsim.computeMetric(flipInput);
+
+        instance.cmdBuf()->end();
+
+        const std::vector cmdBufs = {
+            &**instance.cmdBuf()
+        };
+
+        auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
+        const vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*res.uploadDone,
+            .pWaitDstStageMask = &mask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = *cmdBufs.data(),
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*res.computeDone
+        };
+
+        instance.queue()->submit(submitInfo, {});
+        timestamps.mark("submit compute GPU pipeline");
+        // wait so cmd buffer can be reused for GPU -> CPU transfer
+        instance.waitForFence(res.transferFence);
+
+        auto result = fsim_copy_back(instance, res, timestamps);
+
+        finishRenderDoc();
+
+        FftPlanner::destroy(fftApplication);
+        FftPlanner::destroy(fftApplicationInverse);
+
+        const auto end = std::chrono::high_resolution_clock::now();
+        std::cout << args.inputPath << ": " << result.fsim << " | " << result.fsimc << std::endl;
+        if (args.verbose) {
+            timestamps.print(start, end);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to process '" << args.inputPath << "': " << e.what() << std::endl;
+    }
+}
+
 IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance, const unsigned dWidth, const unsigned dHeight, const unsigned histBufSize) {
     // always 4 channels on input, with 1B per channel
     const auto inputSize = (test.width * test.height) * 4;
 
     // input buffers
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         inputSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostCached
     );
     auto [stgRefBuf, stgRefMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         inputSize,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
@@ -210,56 +355,56 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     const auto outSize = sizeof(float) * 3;
 
     auto [fftBuf, fftMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         fftSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     fftBuf.bindMemory(fftMem, 0);
     auto [ifftBuf, ifftMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         ifftSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     ifftBuf.bindMemory(ifftMem, 0);
     auto [sortBuf, sortMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         sortSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     sortBuf.bindMemory(sortMem, 0);
     auto [sortTempBuf, sortTempMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         sortSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     sortTempBuf.bindMemory(sortTempMem, 0);
     auto [sortHistBuf, sortHistMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         histBufSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     sortHistBuf.bindMemory(sortHistMem, 0);
     auto [noiseLevelsBuf, noiseLevelsMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         noiseLevelsSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     noiseLevelsBuf.bindMemory(noiseLevelsMem, 0);
     auto [noisePowersBuf, noisePowersMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         noisePowersSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -270,8 +415,8 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     auto energyMems = std::vector<vk::raii::DeviceMemory>();
     for (int i = 0; i < 8; i++) {
         auto [energyBuf, energyMem] = VulkanResource::createBuffer(
-            instance.device,
-            instance.physicalDevice,
+            *instance.device(),
+            *instance.physicalDevice(),
             energyBufferSize,
             vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
             vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -283,8 +428,8 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     }
 
     auto [sumBuf, sumMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         energyBufferSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -292,8 +437,8 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     sumBuf.bindMemory(sumMem, 0);
 
     auto [outBuf, outMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         outSize,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -328,23 +473,23 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     vk::ImageCreateInfo colorImageInfo = {floatImageInfo};
     colorImageInfo.format = vk::Format::eR32G32B32A32Sfloat;
 
-    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
-    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
+    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
+    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
 
     auto imagesFloat = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesRg = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesColor = std::vector<std::shared_ptr<VulkanImage>>();
 
     for (int i = 0; i < 16; i++) {
-        imagesFloat.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, floatImageInfo)));
+        imagesFloat.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo)));
     }
 
     for (int i = 0; i < 8; i++) {
-        imagesRg.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, rgImageInfo)));
+        imagesRg.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), rgImageInfo)));
     }
 
     for (int i = 0; i < 2; i++) {
-        imagesColor.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, colorImageInfo)));
+        imagesColor.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo)));
     }
 
     return FSIMResources{
@@ -377,11 +522,11 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
         .memEnergy = std::move(energyMems),
         .bufOut = std::move(outBuf),
         .memOut = std::move(outMem),
-        .uploadDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .computeDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .transferFence = instance.device.createFence(vk::FenceCreateInfo{}),
-        .fftFence = instance.device.createFence(vk::FenceCreateInfo{}),
-        .ifftFence = instance.device.createFence(vk::FenceCreateInfo{}),
+        .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
+        .fftFence = instance.device()->createFence(vk::FenceCreateInfo{}),
+        .ifftFence = instance.device()->createFence(vk::FenceCreateInfo{}),
     };
 }
 
@@ -389,7 +534,7 @@ void IQM::Bin::fsim_upload(const VulkanInstance& instance, const FSIMResources& 
     const vk::CommandBufferBeginInfo beginInfo = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfo);
+    instance.cmdBufTransfer()->begin(beginInfo);
 
     std::vector imagesToInit = {
         res.imageInput,
@@ -400,7 +545,7 @@ void IQM::Bin::fsim_upload(const VulkanInstance& instance, const FSIMResources& 
     imagesToInit.insert(imagesToInit.end(), res.imagesRg.begin(), res.imagesRg.end());
     imagesToInit.insert(imagesToInit.end(), res.imagesColor.begin(), res.imagesColor.end());
 
-    VulkanResource::initImages(*instance.cmd_bufferTransfer, imagesToInit);
+    VulkanResource::initImages(*instance.cmdBufTransfer(), imagesToInit);
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -410,13 +555,13 @@ void IQM::Bin::fsim_upload(const VulkanInstance& instance, const FSIMResources& 
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageInput->width, res.imageInput->height, 1}
     };
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     const vk::SubmitInfo submitInfoCopy{
@@ -426,7 +571,7 @@ void IQM::Bin::fsim_upload(const VulkanInstance& instance, const FSIMResources& 
         .pSignalSemaphores = &*res.uploadDone
     };
 
-    instance.transferQueue->submit(submitInfoCopy, res.transferFence);
+    instance.queueTransfer()->submit(submitInfoCopy, res.transferFence);
 }
 
 IQM::Bin::FSIMResult IQM::Bin::fsim_copy_back(const VulkanInstance& instance, const FSIMResources& res, Timestamps &timestamps) {
@@ -436,19 +581,19 @@ IQM::Bin::FSIMResult IQM::Bin::fsim_copy_back(const VulkanInstance& instance, co
     const vk::CommandBufferBeginInfo beginInfoCopy = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfoCopy);
+    instance.cmdBufTransfer()->begin(beginInfoCopy);
 
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
         .dstOffset = 0,
         .size = 3 * sizeof(float),
     };
-    instance.cmd_bufferTransfer->copyBuffer(res.bufOut, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.bufOut, res.stgInput, bufCopy);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     auto maskCopy = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eTransfer};
@@ -460,10 +605,10 @@ IQM::Bin::FSIMResult IQM::Bin::fsim_copy_back(const VulkanInstance& instance, co
         .pCommandBuffers = *cmdBufsCopy.data()
     };
 
-    const vk::raii::Fence fenceCopy{instance.device, vk::FenceCreateInfo{}};
+    const vk::raii::Fence fenceCopy{*instance.device(), vk::FenceCreateInfo{}};
 
-    instance.transferQueue->submit(submitInfoCopy, *fenceCopy);
-    instance.device.waitIdle();
+    instance.queueTransfer()->submit(submitInfoCopy, *fenceCopy);
+    instance.device()->waitIdle();
 
     timestamps.mark("end GPU work");
 

@@ -7,11 +7,12 @@
 #define IQM_BIN_SSIM_H
 
 #include <IQM/ssim.h>
-#include "../vulkan_instance.h"
-#include "../file_matcher.h"
+#include "../../shared/vulkan.h"
 #include "../../shared/vulkan_res.h"
 #include "../../shared/io.h"
 #include "../../shared/timestamps.h"
+#include "../../IQM/args.h"
+#include "../../IQM-profile/args.h"
 
 namespace IQM::Bin {
     struct SSIMResources {
@@ -42,11 +43,12 @@ namespace IQM::Bin {
         float mssim;
     };
 
-    void ssim_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches);
+    void ssim_run(const IQM::Bin::Args& args, const IQM::VulkanInstance& instance, const std::vector<Match>& imageMatches);
+    void ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::SSIM& ssim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref);
 
-    SSIMResources ssim_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance);
-    void ssim_upload(const VulkanInstance& instance, const SSIMResources& res);
-    SSIMResult ssim_copy_back(const VulkanInstance& instance, const SSIMResources& res, Timestamps &timestamps, uint32_t kernelSize);
+    SSIMResources ssim_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance);
+    void ssim_upload(const IQM::VulkanInstance& instance, const SSIMResources& res);
+    SSIMResult ssim_copy_back(const IQM::VulkanInstance& instance, const SSIMResources& res, Timestamps &timestamps, uint32_t kernelSize);
 }
 
 #endif //IQM_BIN_SSIM_H

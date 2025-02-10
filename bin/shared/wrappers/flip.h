@@ -7,11 +7,12 @@
 #define IQM_BIN_FLIP_H
 
 #include <IQM/flip.h>
-#include "../vulkan_instance.h"
-#include "../file_matcher.h"
+#include "../../shared/vulkan.h"
 #include "../../shared/vulkan_res.h"
 #include "../../shared/io.h"
 #include "../../shared/timestamps.h"
+#include "../../IQM/args.h"
+#include "../../IQM-profile/args.h"
 
 namespace IQM::Bin {
     struct FLIPResources {
@@ -54,11 +55,12 @@ namespace IQM::Bin {
         float meanFlip;
     };
 
-    void flip_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches);
+    void flip_run(const IQM::Bin::Args& args, const IQM::VulkanInstance& instance, const std::vector<Match>& imageMatches);
+    void flip_run_single(const IQM::ProfileArgs& args, const IQM::VulkanInstance& instance, IQM::FLIP& flip, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref);
 
-    FLIPResources flip_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance, unsigned spatialKernelSize, unsigned featureKernelSize);
-    void flip_upload(const VulkanInstance& instance, const FLIPResources& res);
-    FLIPResult flip_copy_back(const VulkanInstance& instance, const FLIPResources& res, Timestamps &timestamps);
+    FLIPResources flip_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance, unsigned spatialKernelSize, unsigned featureKernelSize);
+    void flip_upload(const IQM::VulkanInstance& instance, const FLIPResources& res);
+    FLIPResult flip_copy_back(const IQM::VulkanInstance& instance, const FLIPResources& res, Timestamps &timestamps);
 }
 
 #endif //IQM_BIN_FLIP_H

@@ -15,7 +15,7 @@
 #include "vulkan_instance.h"
 
 #if COMPILE_SSIM
-#include "wrappers/ssim.h"
+#include "../shared/wrappers/ssim.h"
 #endif
 
 #if COMPILE_SVD
@@ -23,11 +23,11 @@
 #endif
 
 #if COMPILE_FSIM
-#include "wrappers/fsim.h"
+#include "../shared/wrappers/fsim.h"
 #endif
 
 #if COMPILE_FLIP
-#include "wrappers/flip.h"
+#include "../shared/wrappers/flip.h"
 #endif
 
 /*
@@ -56,30 +56,6 @@ void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const Inp
     }
 #else
     throw std::runtime_error("SVD support was not compiled");
-#endif
-}
-
-void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
-#ifdef COMPILE_FSIM
-    IQM::GPU::FSIM fsim(vulkan._device);
-
-    // starts only in debug, needs to init after vulkan
-    initRenderDoc();
-
-    auto start = std::chrono::high_resolution_clock::now();
-    auto result = fsim.computeMetric(vulkan, &input, &reference);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // saves capture for debugging
-    finishRenderDoc();
-
-    std::cout << "FSIM: " << result.fsim << std::endl << "FSIMc: " << result.fsimc << std::endl;
-
-    if (args.verbose) {
-        result.timestamps.print(start, end);
-    }
-#else
-    throw std::runtime_error("FSIM support was not compiled");
 #endif
 }*/
 

@@ -31,7 +31,6 @@ static std::vector<uint32_t> srcErrCombine =
 ;
 
 using IQM::GPU::VulkanRuntime;
-using IQM::GPU::VulkanImage;
 
 IQM::FLIP::FLIP(const vk::raii::Device &device):
 descPool(VulkanRuntime::createDescPool(device, 64, {

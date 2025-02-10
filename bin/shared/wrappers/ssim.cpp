@@ -10,7 +10,7 @@
 
 using IQM::Bin::InputImage;
 using IQM::Bin::VulkanImage;
-using IQM::Bin::VulkanInstance;
+using IQM::VulkanInstance;
 using IQM::Bin::VulkanResource;
 
 IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance) {
@@ -18,22 +18,22 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     // add 1 float to end so buffer can be reused for writeback from GPU
     const auto size = (test.width * test.height + 1) * 4;
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         size,
         vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent | vk::MemoryPropertyFlagBits::eHostCached
     );
     auto [stgRefBuf, stgRefMem] = VulkanResource::createBuffer(
-    instance.device,
-    instance.physicalDevice,
+    *instance.device(),
+    *instance.physicalDevice(),
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
     auto [mssimBuf, mssimMem] = VulkanResource::createBuffer(
-        instance.device,
-        instance.physicalDevice,
+        *instance.device(),
+        *instance.physicalDevice(),
         size,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal
@@ -79,13 +79,13 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     dstImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
     dstImageInfo.format = vk::Format::eR32Sfloat;
 
-    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
-    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, srcImageInfo));
-    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, dstImageInfo));
+    auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
+    auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
+    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), dstImageInfo));
     auto imagesBlurred = std::vector<std::shared_ptr<VulkanImage>>();
 
     for (int i = 0; i < 5; i++) {
-        imagesBlurred.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(instance.device, instance.physicalDevice, intermediateImageInfo)));
+        imagesBlurred.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), intermediateImageInfo)));
     }
 
     return SSIMResources{
@@ -99,14 +99,14 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .imageRef = imageRef,
         .imagesBlurred = imagesBlurred,
         .imageOut = imageOut,
-        .uploadDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .computeDone = instance.device.createSemaphore(vk::SemaphoreCreateInfo{}),
-        .transferFence = instance.device.createFence(vk::FenceCreateInfo{}),
+        .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
+        .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
     };
 }
 
 void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches) {
-    IQM::SSIM ssim(instance.device);
+    IQM::SSIM ssim(*instance.device());
 
     int processed = 0;
 
@@ -131,8 +131,8 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
             ssim_upload(instance, res);
 
             auto ssimArgs = IQM::SSIMInput {
-                .device = &instance.device,
-                .cmdBuf = &*instance.cmd_buffer,
+                .device = instance.device(),
+                .cmdBuf = &*instance.cmdBuf(),
                 .ivTest = &res.imageInput->imageView,
                 .ivRef = &res.imageRef->imageView,
                 .ivMeanTest = &res.imagesBlurred[0]->imageView,
@@ -150,14 +150,14 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
             const vk::CommandBufferBeginInfo beginInfo = {
                 .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
             };
-            instance.cmd_buffer->begin(beginInfo);
+            instance.cmdBuf()->begin(beginInfo);
 
             ssim.computeMetric(ssimArgs);
 
-            instance.cmd_buffer->end();
+            instance.cmdBuf()->end();
 
             const std::vector cmdBufs = {
-                &**instance.cmd_buffer
+                &**instance.cmdBuf()
             };
 
             auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
@@ -171,10 +171,10 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
                 .pSignalSemaphores = &*res.computeDone
             };
 
-            instance.queue->submit(submitInfo, {});
+            instance.queue()->submit(submitInfo, {});
             timestamps.mark("submit compute GPU pipeline");
             // wait so cmd buffer can be reused for GPU -> CPU transfer
-            VulkanInstance::waitForFence(instance.device, res.transferFence);
+            instance.waitForFence(res.transferFence);
 
             auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize);
 
@@ -202,11 +202,87 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
     std::cout << "Processed " << processed << "/" << imageMatches.size() <<" images" << std::endl;
 }
 
+void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::SSIM& ssim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
+    try {
+        Timestamps timestamps;
+        auto start = std::chrono::high_resolution_clock::now();
+
+        timestamps.mark("images loaded");
+
+        initRenderDoc();
+
+        auto res = ssim_init_res(input, ref, instance);
+        timestamps.mark("resources allocated");
+
+        ssim_upload(instance, res);
+
+        auto ssimArgs = IQM::SSIMInput {
+            .device = instance.device(),
+            .cmdBuf = &*instance.cmdBuf(),
+            .ivTest = &res.imageInput->imageView,
+            .ivRef = &res.imageRef->imageView,
+            .ivMeanTest = &res.imagesBlurred[0]->imageView,
+            .ivMeanRef = &res.imagesBlurred[1]->imageView,
+            .ivVarTest = &res.imagesBlurred[2]->imageView,
+            .ivVarRef = &res.imagesBlurred[3]->imageView,
+            .ivCovar = &res.imagesBlurred[4]->imageView,
+            .ivOut = &res.imageOut->imageView,
+            .imgOut = &res.imageOut->image,
+            .bufMssim = &res.mssimBuf,
+            .width = input.width,
+            .height = input.height
+        };
+
+        const vk::CommandBufferBeginInfo beginInfo = {
+            .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+        };
+        instance.cmdBuf()->begin(beginInfo);
+
+        ssim.computeMetric(ssimArgs);
+
+        instance.cmdBuf()->end();
+
+        const std::vector cmdBufs = {
+            &**instance.cmdBuf()
+        };
+
+        auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
+        const vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*res.uploadDone,
+            .pWaitDstStageMask = &mask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = *cmdBufs.data(),
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*res.computeDone
+        };
+
+        instance.queue()->submit(submitInfo, {});
+        timestamps.mark("submit compute GPU pipeline");
+        // wait so cmd buffer can be reused for GPU -> CPU transfer
+        instance.waitForFence(res.transferFence);
+
+        auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize);
+
+        finishRenderDoc();
+
+        timestamps.mark("output saved");
+
+        const auto end = std::chrono::high_resolution_clock::now();
+        std::cout << args.inputPath << ": " << result.mssim << std::endl;
+        if (args.verbose) {
+            timestamps.print(start, end);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to process '" << args.inputPath << "': " << e.what() << std::endl;
+    }
+}
+
 void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &res) {
     const vk::CommandBufferBeginInfo beginInfo = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfo);
+    instance.cmdBufTransfer()->begin(beginInfo);
 
     std::vector imagesToInit = {
         res.imageInput,
@@ -216,7 +292,7 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
 
     imagesToInit.insert(imagesToInit.end(), res.imagesBlurred.begin(), res.imagesBlurred.end());
 
-    VulkanResource::initImages(*instance.cmd_bufferTransfer, imagesToInit);
+    VulkanResource::initImages(*instance.cmdBufTransfer(), imagesToInit);
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -226,13 +302,13 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageInput->width, res.imageInput->height, 1}
     };
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
-    instance.cmd_bufferTransfer->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     const vk::SubmitInfo submitInfoCopy{
@@ -242,7 +318,7 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
         .pSignalSemaphores = &*res.uploadDone
     };
 
-    instance.transferQueue->submit(submitInfoCopy, res.transferFence);
+    instance.queueTransfer()->submit(submitInfoCopy, res.transferFence);
 }
 
 IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, const SSIMResources &res, Timestamps &timestamps, uint32_t kernelSize) {
@@ -252,7 +328,7 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
     const vk::CommandBufferBeginInfo beginInfoCopy = {
         .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
     };
-    instance.cmd_bufferTransfer->begin(beginInfoCopy);
+    instance.cmdBufTransfer()->begin(beginInfoCopy);
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
@@ -262,18 +338,18 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageOut->width, res.imageOut->height, 1}
     };
-    instance.cmd_bufferTransfer->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    instance.cmdBufTransfer()->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
         .dstOffset = sizeof(float) * res.imageOut->width * res.imageOut->height,
         .size = sizeof(float),
     };
-    instance.cmd_bufferTransfer->copyBuffer(res.mssimBuf, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.mssimBuf, res.stgInput, bufCopy);
 
-    instance.cmd_bufferTransfer->end();
+    instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
-        &**instance.cmd_bufferTransfer
+        &**instance.cmdBufTransfer()
     };
 
     auto maskCopy = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eTransfer};
@@ -285,10 +361,10 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
         .pCommandBuffers = *cmdBufsCopy.data()
     };
 
-    const vk::raii::Fence fenceCopy{instance.device, vk::FenceCreateInfo{}};
+    const vk::raii::Fence fenceCopy{*instance.device(), vk::FenceCreateInfo{}};
 
-    instance.transferQueue->submit(submitInfoCopy, *fenceCopy);
-    instance.device.waitIdle();
+    instance.queueTransfer()->submit(submitInfoCopy, *fenceCopy);
+    instance.device()->waitIdle();
 
     timestamps.mark("end GPU work");
 

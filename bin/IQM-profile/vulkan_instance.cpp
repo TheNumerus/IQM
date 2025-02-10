@@ -3,9 +3,13 @@
  * Petr Volf - 2025
  */
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 #include "vulkan_instance.h"
 
-IQM::Bin::VulkanInstance::VulkanInstance() {
+#include <iostream>
+
+IQM::Profile::VulkanInstance::VulkanInstance(GLFWwindow * window) {
     this->context = vk::raii::Context{};
 
     vk::ApplicationInfo appInfo{
@@ -20,7 +24,16 @@ IQM::Bin::VulkanInstance::VulkanInstance() {
 
     std::vector extensions = {
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        VK_KHR_SURFACE_EXTENSION_NAME,
     };
+
+    uint32_t extensionCount;
+    glfwGetRequiredInstanceExtensions(&extensionCount);
+    const char** glfwExtensions;
+    glfwExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+    for (uint32_t i = 0; i < extensionCount; i++) {
+        extensions.push_back(glfwExtensions[i]);
+    }
 
     const vk::InstanceCreateInfo instanceCreateInfo{
         .pApplicationInfo = &appInfo,
@@ -33,16 +46,147 @@ IQM::Bin::VulkanInstance::VulkanInstance() {
     this->instance = vk::raii::Instance{this->context, instanceCreateInfo};
 
     this->initQueues();
+
+    VkSurfaceKHR surface;
+
+    if (glfwCreateWindowSurface(*this->instance, window, nullptr, &surface) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create window surface!");
+    }
+    this->surface = vk::raii::SurfaceKHR{this->instance, vk::SurfaceKHR(surface)};
+
+    this->createSwapchain();
 }
 
-void IQM::Bin::VulkanInstance::waitForFence(const vk::raii::Fence &fence) const {
+void IQM::Profile::VulkanInstance::createSwapchain() {
+    uint32_t queues[1] = {this->queueFamilyIndex};
+
+    auto formats = this->_physicalDevice.getSurfaceFormatsKHR(surface);
+
+    auto cap = this->_physicalDevice.getSurfaceCapabilitiesKHR(surface);
+
+    vk::SwapchainCreateInfoKHR swapchainCreateInfo{
+        .surface = surface,
+        .minImageCount = cap.minImageCount + 1,
+        .imageFormat = formats[0].format,
+        .imageExtent = vk::Extent2D{.width = 1280, .height = 720},
+        .imageArrayLayers = 1,
+        .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+        .queueFamilyIndexCount = 1,
+        .pQueueFamilyIndices = queues,
+        .presentMode = vk::PresentModeKHR::eImmediate,
+    };
+
+    this->swapchain = vk::raii::SwapchainKHR{this->_device, swapchainCreateInfo};
+
+    const vk::CommandBufferBeginInfo beginInfo = {
+        .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+    };
+    this->cmd_buffer->begin(beginInfo);
+
+    vk::AccessFlags sourceAccessMask;
+    vk::PipelineStageFlags sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    vk::AccessFlags destinationAccessMask;
+    vk::PipelineStageFlags destinationStage = vk::PipelineStageFlagBits::eHost;
+
+    vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor;
+
+    vk::ImageSubresourceRange imageSubresourceRange(aspectMask, 0, 1, 0, 1);
+
+    for (const auto image: this->swapchain.getImages()) {
+        vk::ImageMemoryBarrier imageMemoryBarrier{
+            .srcAccessMask = sourceAccessMask,
+            .dstAccessMask = destinationAccessMask,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::ePresentSrcKHR,
+            .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .image = image,
+            .subresourceRange = imageSubresourceRange
+        };
+        this->cmd_buffer->pipelineBarrier(sourceStage, destinationStage, {}, nullptr, nullptr, imageMemoryBarrier);
+    }
+
+    this->cmd_buffer->end();
+
+    const std::vector cmdBufs = {
+        &**this->cmd_buffer
+    };
+
+    auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader};
+    const vk::SubmitInfo submitInfo{
+        .pWaitDstStageMask = &mask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = *cmdBufs.data()
+    };
+
+    const vk::raii::Fence fence{this->_device, vk::FenceCreateInfo{}};
+
+    this->_queue->submit(submitInfo, *fence);
+    this->_device.waitIdle();
+
+    this->imageAvailableSemaphore = vk::raii::Semaphore{this->_device, vk::SemaphoreCreateInfo{}};
+    this->renderFinishedSemaphore = vk::raii::Semaphore{this->_device, vk::SemaphoreCreateInfo{}};
+    this->swapchainFence = vk::raii::Fence{this->_device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled}};
+}
+
+unsigned IQM::Profile::VulkanInstance::acquire() {
+    auto resWait = this->_device.waitForFences({this->swapchainFence}, true, std::numeric_limits<u_int64_t>::max());
+    if (resWait != vk::Result::eSuccess) {
+        std::cerr << "Failed to acquire swapchain fence" << std::endl;
+    }
+
+    this->_device.resetFences({this->swapchainFence});
+
+    auto[res, index] = this->swapchain.acquireNextImage(std::numeric_limits<u_int64_t>::max(), this->imageAvailableSemaphore, {});
+    if (res != vk::Result::eSuccess) {
+        std::cerr << "Failed to acquire swapchain image" << std::endl;
+    }
+
+    return index;
+}
+
+void IQM::Profile::VulkanInstance::present(unsigned index) {
+    const vk::CommandBufferBeginInfo beginInfo = {
+        .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
+    };
+    this->cmd_buffer->begin(beginInfo);
+    this->cmd_buffer->end();
+
+    const std::vector cmdBufs = {
+        &**this->cmd_buffer
+    };
+
+    auto mask = vk::PipelineStageFlags{vk::PipelineStageFlagBits::eAllCommands};
+    const vk::SubmitInfo submitInfo{
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &*this->imageAvailableSemaphore,
+        .pWaitDstStageMask = &mask,
+        .commandBufferCount = 1,
+        .pCommandBuffers = *cmdBufs.data(),
+    };
+
+    this->_queue->submit(submitInfo, *this->swapchainFence);
+
+    vk::PresentInfoKHR presentInfo{};
+    vk::SwapchainKHR swapChains[] = {*this->swapchain};
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &index;
+
+    auto res = this->_queue->presentKHR(presentInfo);
+    if (res != vk::Result::eSuccess) {
+        std::cout << "Failed to present" << std::endl;
+    }
+}
+
+void IQM::Profile::VulkanInstance::waitForFence(const vk::raii::Fence &fence) const {
     auto res = _device.waitForFences({fence}, true, std::numeric_limits<uint64_t>::max());
     if (res != vk::Result::eSuccess) {
         throw std::runtime_error("Failed to wait for fence");
     }
 }
 
-void IQM::Bin::VulkanInstance::initQueues() {
+void IQM::Profile::VulkanInstance::initQueues() {
     std::optional<vk::raii::PhysicalDevice> physicalDevice;
     // try to access faster dedicated transfer queue
     int computeQueueIndex = -1;
@@ -107,7 +251,9 @@ void IQM::Bin::VulkanInstance::initQueues() {
         };
     }
 
-    std::vector<char*> deviceExtensions = {};
+    std::vector deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
 
     const vk::DeviceCreateInfo deviceCreateInfo{
         .queueCreateInfoCount = static_cast<uint32_t>(queues.size()),
@@ -158,7 +304,7 @@ void IQM::Bin::VulkanInstance::initQueues() {
     }
 }
 
-std::vector<const char *> IQM::Bin::VulkanInstance::getLayers() {
+std::vector<const char *> IQM::Profile::VulkanInstance::getLayers() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 

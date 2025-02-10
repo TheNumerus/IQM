@@ -8,7 +8,6 @@
 #include <memory>
 
 #include <IQM/base/vulkan_runtime.h>
-#include <IQM/base/vulkan_image.h>
 
 namespace IQM {
     struct FSIMInput;
