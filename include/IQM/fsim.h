@@ -7,8 +7,6 @@
 #define FSIM_H
 #include <vkFFT.h>
 
-#include <IQM/input_image.h>
-#include <../../bin/shared/timestamps.h>
 #include <IQM/base/vulkan_runtime.h>
 #include <IQM/fsim/log_gabor.h>
 #include <IQM/fsim/lowpass_filter.h>
@@ -20,31 +18,56 @@
 #include <IQM/fsim/phase_congruency.h>
 #include <IQM/fsim/sum_filter_responses.h>
 
-namespace IQM::GPU {
+namespace IQM {
     constexpr int FSIM_ORIENTATIONS = 4;
     constexpr int FSIM_SCALES = 4;
 
-    struct FSIMResult {
-        float fsim;
-        float fsimc;
-        Timestamps timestamps;
+    /**
+     * ## Images with format RGBA u8 | (WxH)
+     * - *ivTest, *ivRef
+     * ## Images with format R f32 | D(WxH)
+     * - *ivAngular[4], ivScales[4], *ivTestGrad, *ivRefGrad, *ivTestPc, *ivRefPc, *ivLowpass, *ivFinalSums[3]
+     * ## Images with format RG f32 | D(WxH)
+     * - *ivFilterResponsesTest[4]
+     * - *ivFilterResponsesRef[4]
+     */
+    struct FSIMInput {
+        const vk::raii::Device *device;
+        const vk::raii::PhysicalDevice *physicalDevice;
+        const vk::raii::Queue *queue;
+        const vk::raii::CommandPool *commandPool;
+        const vk::raii::CommandBuffer *cmdBuf;
+        const vk::raii::Fence *fenceFft, *fenceIfft;
+        const vk::raii::ImageView *ivTest, *ivRef, *ivTestDown, *ivRefDown, *ivTestGrad, *ivRefGrad, *ivTestPc, *ivRefPc, *ivLowpass;
+        const vk::raii::ImageView *ivAngular[FSIM_ORIENTATIONS];
+        const vk::raii::ImageView *ivScales[FSIM_SCALES];
+        const vk::raii::ImageView *ivFilterResponsesTest[FSIM_ORIENTATIONS];
+        const vk::raii::ImageView *ivFilterResponsesRef[FSIM_ORIENTATIONS];
+        const vk::raii::ImageView *ivFinalSums[3];
+        const vk::raii::Image *imgFinalSums[3];
+        const vk::raii::Buffer *bufFft, *bufIfft, *bufSort, *bufSortTemp, *bufSortHist, *bufNoiseLevels, *bufNoisePowers, *bufSum, *bufOut;
+        const vk::raii::Buffer *bufEnergy[2 * FSIM_ORIENTATIONS];
+        // FFT lib
+        VkFFTApplication *fftApplication;
+        VkFFTApplication *fftApplicationInverse;
+        unsigned width, height;
     };
 
     class FSIM {
     public:
         explicit FSIM(const vk::raii::Device &device);
-        FSIMResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
+        void computeMetric(const FSIMInput& input);
+
+        static std::pair<unsigned, unsigned> downscaledSize(unsigned width, unsigned height);
+        static unsigned sortBufSize(unsigned dWidth, unsigned dHeight);
 
     private:
+        void initDescriptors(const FSIMInput& input);
         static int computeDownscaleFactor(int width, int height);
-        void sendImagesToGpu(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
-        void createDownscaledImages(const VulkanRuntime & runtime, int width_downscale, int height_downscale);
-        void computeDownscaledImages(const VulkanRuntime & runtime, int, int, int);
-        void createGradientMap(const VulkanRuntime & runtime, int, int);
-        void initFftLibrary(const VulkanRuntime &runtime, int width, int height);
-        void teardownFftLibrary();
-        void computeFft(const VulkanRuntime &runtime, int width, int height);
-        void computeMassInverseFft(const VulkanRuntime & runtime, const vk::raii::Buffer &buffer);
+        void computeDownscaledImages(const FSIMInput& input, int factor, int width, int height);
+        void createGradientMap(const FSIMInput& input, int, int);
+        void computeFft(const FSIMInput& input, unsigned width, unsigned height);
+        void computeMassInverseFft(const FSIMInput& input);
 
         vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
 
@@ -66,35 +89,17 @@ namespace IQM::GPU {
         vk::raii::DescriptorSet descSetDownscaleIn = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetDownscaleRef = VK_NULL_HANDLE;
 
-        std::shared_ptr<VulkanImage> imageInput;
-        std::shared_ptr<VulkanImage> imageRef;
-
-        std::shared_ptr<VulkanImage> imageInputDownscaled;
-        std::shared_ptr<VulkanImage> imageRefDownscaled;
-
         // gradient map pass
         vk::raii::PipelineLayout layoutGradientMap = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGradientMap = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGradientMapIn = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetGradientMapRef = VK_NULL_HANDLE;
 
-        std::shared_ptr<VulkanImage> imageGradientMapInput;
-        std::shared_ptr<VulkanImage> imageGradientMapRef;
-
         // extract luma for FFT library pass
         vk::raii::PipelineLayout layoutExtractLuma = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineExtractLuma = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetExtractLumaIn = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetExtractLumaRef = VK_NULL_HANDLE;
-
-        vk::raii::DeviceMemory memoryFft = VK_NULL_HANDLE;
-        vk::raii::Buffer bufferFft = VK_NULL_HANDLE;
-
-        // FFT lib
-        VkFFTApplication fftApplication{};
-        VkFFTApplication fftApplicationInverse{};
-        vk::raii::Fence fftFence = VK_NULL_HANDLE;
-        vk::raii::Fence fftFenceInverse = VK_NULL_HANDLE;
     };
 }
 

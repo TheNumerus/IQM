@@ -8,21 +8,14 @@
 
 #include <IQM/base/vulkan_runtime.h>
 
-namespace IQM::GPU {
+namespace IQM {
+    struct FSIMInput;
+
     class FSIMNoisePower {
     public:
         explicit FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void computeNoisePower(const VulkanRuntime &runtime, const vk::raii::Buffer &filterSums, const vk::raii::Buffer &fftBuffer, int width, int height);
-
-        vk::raii::DeviceMemory noisePowersMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer noisePowers = VK_NULL_HANDLE;
-
-        vk::raii::DeviceMemory noisePowersSortMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer noisePowersSortBuf = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory noisePowersTempMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer noisePowersTempBuf = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory noisePowersSortHistogramMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer noisePowersSortHistogramBuf = VK_NULL_HANDLE;
+        void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height) const;
+        void computeNoisePower(const FSIMInput &input, unsigned width, unsigned height);
 
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
@@ -43,8 +36,6 @@ namespace IQM::GPU {
         vk::raii::Pipeline pipelineNoisePower = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutNoisePower = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetNoisePower = VK_NULL_HANDLE;
-    private:
-        void prepareStorage(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuffer, const vk::raii::Buffer &filterSums, unsigned size, unsigned histBufSize);
     };
 }
 

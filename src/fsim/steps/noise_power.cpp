@@ -22,7 +22,9 @@ static std::vector<uint32_t> srcOut =
 #include <fsim/fsim_noise_power.inc>
 ;
 
-IQM::GPU::FSIMNoisePower::FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+using IQM::GPU::VulkanRuntime;
+
+IQM::FSIMNoisePower::FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
     const auto smPack = VulkanRuntime::createShaderModule(device, src);
     const auto smSort = VulkanRuntime::createShaderModule(device, srcSort);
     const auto smSortHistogram = VulkanRuntime::createShaderModule(device, srcSortHistogram);
@@ -77,16 +79,13 @@ IQM::GPU::FSIMNoisePower::FSIMNoisePower(const vk::raii::Device &device, const v
     this->pipelineNoisePower = VulkanRuntime::createComputePipeline(device, smNoisePower, this->layoutNoisePower);
 }
 
-void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, const vk::raii::Buffer& filterSums, const vk::raii::Buffer& fftBuffer, int width, int height) {
+void IQM::FSIMNoisePower::computeNoisePower(const FSIMInput &input, const unsigned width, const unsigned height) {
     uint32_t sortGlobalInvocationSize = (width * height) / 32;
     uint32_t remainder = (width * height) % 32;
     sortGlobalInvocationSize += remainder > 0 ? 1 : 0;
 
     uint32_t nSortWorkgroups = (sortGlobalInvocationSize + 256 - 1) / 256;
-    auto histBufSize = nSortWorkgroups * 256 * sizeof(uint32_t);
     uint32_t nBlocksPerWorkgroup = 32;
-
-    this->prepareStorage(runtime, fftBuffer, filterSums, width * height, histBufSize);
 
     vk::MemoryBarrier barrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
@@ -94,17 +93,17 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
     };
 
     for (int i = 0; i < FSIM_ORIENTATIONS * 2; i++) {
-        runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipeline);
-        runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layout, 0, {this->descSet}, {});
+        input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipeline);
+        input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layout, 0, {this->descSet}, {});
 
-        runtime._cmd_buffer->pushConstants<unsigned>(this->layout, vk::ShaderStageFlagBits::eCompute, 0, width * height);
-        runtime._cmd_buffer->pushConstants<unsigned>(this->layout, vk::ShaderStageFlagBits::eCompute, sizeof(uint32_t),i);
+        input.cmdBuf->pushConstants<unsigned>(this->layout, vk::ShaderStageFlagBits::eCompute, 0, width * height);
+        input.cmdBuf->pushConstants<unsigned>(this->layout, vk::ShaderStageFlagBits::eCompute, sizeof(uint32_t),i);
 
         auto groups = (width * height) / 256 + 1;
 
-        runtime._cmd_buffer->dispatch(groups, 1, 1);
+        input.cmdBuf->dispatch(groups, 1, 1);
 
-        runtime._cmd_buffer->pipelineBarrier(
+        input.cmdBuf->pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eComputeShader,
             vk::DependencyFlagBits::eDeviceGroup,
@@ -115,8 +114,8 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
 
         for (unsigned j = 0; j < 4; j++) {
             auto activeSet = j % 2 == 0 ? &this->descSetSortHistogramEven : &this->descSetSortHistogramOdd;
-            runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSortHistogram);
-            runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSortHistogram, 0, {*activeSet}, {});
+            input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSortHistogram);
+            input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSortHistogram, 0, {*activeSet}, {});
 
             std::array values = {
                 static_cast<unsigned>(width * height),
@@ -124,11 +123,11 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
                 nSortWorkgroups,
                 nBlocksPerWorkgroup,
             };
-            runtime._cmd_buffer->pushConstants<unsigned>(this->layoutSortHistogram, vk::ShaderStageFlagBits::eCompute, 0, values);
+            input.cmdBuf->pushConstants<unsigned>(this->layoutSortHistogram, vk::ShaderStageFlagBits::eCompute, 0, values);
 
-            runtime._cmd_buffer->dispatch(sortGlobalInvocationSize, 1, 1);
+            input.cmdBuf->dispatch(sortGlobalInvocationSize, 1, 1);
 
-            runtime._cmd_buffer->pipelineBarrier(
+            input.cmdBuf->pipelineBarrier(
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::DependencyFlagBits::eDeviceGroup,
@@ -138,14 +137,14 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
             );
 
             activeSet = j % 2 == 0 ? &this->descSetSortEven : &this->descSetSortOdd;
-            runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSort);
-            runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSort, 0, {*activeSet}, {});
+            input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSort);
+            input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSort, 0, {*activeSet}, {});
 
-            runtime._cmd_buffer->pushConstants<unsigned>(this->layoutSort, vk::ShaderStageFlagBits::eCompute, 0, values);
+            input.cmdBuf->pushConstants<unsigned>(this->layoutSort, vk::ShaderStageFlagBits::eCompute, 0, values);
 
-            runtime._cmd_buffer->dispatch(sortGlobalInvocationSize, 1, 1);
+            input.cmdBuf->dispatch(sortGlobalInvocationSize, 1, 1);
 
-            runtime._cmd_buffer->pipelineBarrier(
+            input.cmdBuf->pipelineBarrier(
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::DependencyFlagBits::eDeviceGroup,
@@ -155,15 +154,15 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
             );
         }
 
-        runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineNoisePower);
-        runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutNoisePower, 0, {this->descSetNoisePower}, {});
+        input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineNoisePower);
+        input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutNoisePower, 0, {this->descSetNoisePower}, {});
 
-        runtime._cmd_buffer->pushConstants<unsigned>(this->layoutNoisePower, vk::ShaderStageFlagBits::eCompute, 0, width * height);
-        runtime._cmd_buffer->pushConstants<unsigned>(this->layoutNoisePower, vk::ShaderStageFlagBits::eCompute, sizeof(uint32_t),i);
+        input.cmdBuf->pushConstants<unsigned>(this->layoutNoisePower, vk::ShaderStageFlagBits::eCompute, 0, width * height);
+        input.cmdBuf->pushConstants<unsigned>(this->layoutNoisePower, vk::ShaderStageFlagBits::eCompute, sizeof(uint32_t),i);
 
-        runtime._cmd_buffer->dispatch(1, 1, 1);
+        input.cmdBuf->dispatch(1, 1, 1);
 
-        runtime._cmd_buffer->pipelineBarrier(
+        input.cmdBuf->pipelineBarrier(
             vk::PipelineStageFlagBits::eComputeShader,
             vk::PipelineStageFlagBits::eComputeShader,
             vk::DependencyFlagBits::eDeviceGroup,
@@ -174,80 +173,41 @@ void IQM::GPU::FSIMNoisePower::computeNoisePower(const VulkanRuntime &runtime, c
     }
 }
 
-void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, const vk::raii::Buffer& fftBuffer, const vk::raii::Buffer& filterSums, unsigned size, unsigned histBufSize) {
-    auto [buf, mem] = VulkanRuntime::createBuffer(
-        runtime._device,
-        runtime._physicalDevice,
-        2 * FSIM_ORIENTATIONS * sizeof(float),
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    buf.bindMemory(mem, 0);
-    this->noisePowers = std::move(buf);
-    this->noisePowersMemory = std::move(mem);
+void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height) const {
+    uint32_t sortGlobalInvocationSize = (width * height) / 32;
+    uint32_t remainder = (width * height) % 32;
+    sortGlobalInvocationSize += remainder > 0 ? 1 : 0;
 
-    auto [bufSort, memSort] = VulkanRuntime::createBuffer(
-        runtime._device,
-        runtime._physicalDevice,
-        2 * FSIM_ORIENTATIONS * size * sizeof(float),
-        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-
-    auto [bufTemp, memTemp] = VulkanRuntime::createBuffer(
-        runtime._device,
-        runtime._physicalDevice,
-        2 * FSIM_ORIENTATIONS * size * sizeof(float),
-        vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-
-    auto [bufHist, memHist] = VulkanRuntime::createBuffer(
-        runtime._device,
-        runtime._physicalDevice,
-        histBufSize,
-        vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-
-    bufSort.bindMemory(memSort, 0);
-    bufTemp.bindMemory(memTemp, 0);
-    bufHist.bindMemory(memHist, 0);
-
-    this->noisePowersSortBuf = std::move(bufSort);
-    this->noisePowersSortMemory = std::move(memSort);
-    this->noisePowersTempBuf = std::move(bufTemp);
-    this->noisePowersTempMemory = std::move(memTemp);
-    this->noisePowersSortHistogramBuf = std::move(bufHist);
-    this->noisePowersSortHistogramMemory = std::move(memHist);
+    uint32_t nSortWorkgroups = (sortGlobalInvocationSize + 256 - 1) / 256;
+    auto histBufSize = nSortWorkgroups * 256 * sizeof(uint32_t);
 
     auto bufInfoIn = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = fftBuffer,
+            .buffer = *input.bufIfft,
             .offset = 0,
-            .range = 2 * size * sizeof(float) * FSIM_ORIENTATIONS * FSIM_SCALES * 3,
+            .range = 2 * width * height * sizeof(float) * FSIM_ORIENTATIONS * FSIM_SCALES * 3,
         }
     };
 
     auto bufInfoOut = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = this->noisePowersSortBuf,
+            .buffer = *input.bufSort,
             .offset = 0,
-            .range = size * sizeof(float) * FSIM_ORIENTATIONS * 2,
+            .range = width * height * sizeof(float) * FSIM_ORIENTATIONS * 2,
         }
     };
 
     auto bufInfoSortTemp = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = this->noisePowersTempBuf,
+            .buffer = *input.bufSortTemp,
             .offset = 0,
-            .range = size * sizeof(float) * FSIM_ORIENTATIONS * 2,
+            .range = width * height * sizeof(float) * FSIM_ORIENTATIONS * 2,
         }
     };
 
     auto bufInfoSortHist = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = this->noisePowersSortHistogramBuf,
+            .buffer = *input.bufSortHist,
             .offset = 0,
             .range = histBufSize,
         }
@@ -255,7 +215,7 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
 
     auto bufInfoFilterSums = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = filterSums,
+            .buffer = **input.bufNoiseLevels,
             .offset = 0,
             .range = FSIM_ORIENTATIONS * sizeof(float),
         }
@@ -263,7 +223,7 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
 
     auto bufInfoNoisePower = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = this->noisePowers,
+            .buffer = **input.bufNoisePowers,
             .offset = 0,
             .range = 2 * FSIM_ORIENTATIONS * sizeof(float),
         }
@@ -271,8 +231,7 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
 
     const auto writes = {
         // copy pass
-        VulkanRuntime::createWriteSet(
-            this->descSet,
+        VulkanRuntime::createWriteSet(this->descSet,
             0,
             bufInfoIn
         ),
@@ -353,5 +312,5 @@ void IQM::GPU::FSIMNoisePower::prepareStorage(const VulkanRuntime &runtime, cons
         ),
     };
 
-    runtime._device.updateDescriptorSets(writes, nullptr);
+    input.device->updateDescriptorSets(writes, nullptr);
 }

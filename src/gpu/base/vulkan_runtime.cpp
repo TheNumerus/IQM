@@ -523,20 +523,6 @@ vk::raii::DescriptorSetLayout IQM::GPU::VulkanRuntime::createDescLayout(const vk
 
     return vk::raii::DescriptorSetLayout {device, info};
 }
-/*
-std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<std::shared_ptr<VulkanImage>> &images) {
-    std::vector<vk::DescriptorImageInfo> vec(images.size());
-
-    for (size_t i = 0; i < vec.size(); i++) {
-        vec[i] = vk::DescriptorImageInfo {
-            .sampler = nullptr,
-            .imageView = images[i]->imageView,
-            .imageLayout = vk::ImageLayout::eGeneral,
-        };
-    }
-
-    return vec;
-}*/
 
 std::vector<vk::DescriptorImageInfo> IQM::GPU::VulkanRuntime::createImageInfos(const std::vector<const vk::raii::ImageView*> &images) {
     std::vector<vk::DescriptorImageInfo> vec(images.size());

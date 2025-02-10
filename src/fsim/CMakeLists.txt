@@ -14,9 +14,9 @@ add_library(IQM::FSIM ALIAS IQM-FSIM)
 find_package(Vulkan REQUIRED)
 
 target_include_directories(IQM-FSIM
-        PRIVATE "../../../include"
-        PRIVATE "../../../shaders_out"
-        PUBLIC "../../../lib/VkFFT/vkFFT"
+        PRIVATE "../../include"
+        PRIVATE "../../shaders_out"
+        PUBLIC "../../lib/VkFFT/vkFFT"
 )
 
 add_library(VkFFT INTERFACE)

@@ -4,8 +4,7 @@
  */
 
 #include <IQM/flip/color_pipeline.h>
-
-#include "IQM/flip.h"
+#include <IQM/flip.h>
 
 static std::vector<uint32_t> srcHorizontal =
 #include <flip/spatial_prefilter_horizontal.inc>
@@ -20,7 +19,6 @@ static std::vector<uint32_t> srcDetect =
 ;
 
 using IQM::GPU::VulkanRuntime;
-using IQM::GPU::VulkanImage;
 
 IQM::FLIPColorPipeline::FLIPColorPipeline(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
     const auto smCsfPrefilterHorizontal = VulkanRuntime::createShaderModule(device, srcHorizontal);

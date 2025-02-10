@@ -14,7 +14,9 @@ static std::vector<uint32_t> srcEnergySum =
 #include <fsim/fsim_noise_energy_sum.inc>
 ;
 
-IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
+using IQM::GPU::VulkanRuntime;
+
+IQM::FSIMEstimateEnergy::FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool) {
     const auto smEstimate = VulkanRuntime::createShaderModule(device, srcMultFilters);
     const auto smSum = VulkanRuntime::createShaderModule(device, srcEnergySum);
 
@@ -52,23 +54,21 @@ IQM::GPU::FSIMEstimateEnergy::FSIMEstimateEnergy(const vk::raii::Device &device,
     this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 }
 
-void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuf, const int width, const int height) {
-    this->prepareBufferStorage(runtime, fftBuf, width, height);
-
-    runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->estimateEnergyPipeline);
-    runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->estimateEnergyLayout, 0, {this->estimateEnergyDescSet}, {});
-    runtime._cmd_buffer->pushConstants<unsigned>(this->estimateEnergyLayout, vk::ShaderStageFlagBits::eCompute, 0, width * height);
+void IQM::FSIMEstimateEnergy::estimateEnergy(const FSIMInput& input, const unsigned width, const unsigned height) {
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->estimateEnergyPipeline);
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->estimateEnergyLayout, 0, {this->estimateEnergyDescSet}, {});
+    input.cmdBuf->pushConstants<unsigned>(this->estimateEnergyLayout, vk::ShaderStageFlagBits::eCompute, 0, width * height);
 
     //shader works in groups of 128 threads
     auto groupsX = ((width * height) / 128) + 1;
 
-    runtime._cmd_buffer->dispatch(groupsX, 1, FSIM_ORIENTATIONS);
+    input.cmdBuf->dispatch(groupsX, 1, FSIM_ORIENTATIONS);
 
     vk::MemoryBarrier memBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
         .dstAccessMask = vk::AccessFlagBits::eShaderRead,
     };
-    runtime._cmd_buffer->pipelineBarrier(
+    input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlagBits::eDeviceGroup,
@@ -77,8 +77,8 @@ void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, 
         {}
     );
 
-    runtime._cmd_buffer->bindPipeline(vk::PipelineBindPoint::eCompute, this->sumPipeline);
-    runtime._cmd_buffer->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->sumLayout, 0, {this->sumDescSet}, {});
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->sumPipeline);
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->sumLayout, 0, {this->sumDescSet}, {});
 
     uint32_t bufferSize = width * height;
     // now sum
@@ -87,18 +87,18 @@ void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, 
         uint32_t size = bufferSize;
 
         for (;;) {
-            runtime._cmd_buffer->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, 0, size);
-            runtime._cmd_buffer->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, sizeof(unsigned), o);
-            runtime._cmd_buffer->dispatch(groups, 1, 1);
+            input.cmdBuf->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, 0, size);
+            input.cmdBuf->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, sizeof(unsigned), o);
+            input.cmdBuf->dispatch(groups, 1, 1);
 
             vk::BufferMemoryBarrier barrier = {
                 .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
                 .dstAccessMask = vk::AccessFlagBits::eShaderRead,
-                .buffer = this->energyBuffers[o],
+                .buffer = *input.bufEnergy[o],
                 .offset = 0,
                 .size = bufferSize * sizeof(float),
             };
-            runtime._cmd_buffer->pipelineBarrier(
+            input.cmdBuf->pipelineBarrier(
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::DependencyFlagBits::eDeviceGroup,
@@ -115,27 +115,12 @@ void IQM::GPU::FSIMEstimateEnergy::estimateEnergy(const VulkanRuntime &runtime, 
     }
 }
 
-void IQM::GPU::FSIMEstimateEnergy::prepareBufferStorage(const VulkanRuntime &runtime, const vk::raii::Buffer &fftBuf, const int width, const int height) {
+void IQM::FSIMEstimateEnergy::setUpDescriptors(const FSIMInput& input, const unsigned width, const unsigned height) {
     uint32_t bufferSize = width * height * sizeof(float);
-
-    this->energyBuffers = std::vector<vk::raii::Buffer>();
-    this->energyBuffersMemory = std::vector<vk::raii::DeviceMemory>();
-    for (int i = 0; i < 2 * FSIM_ORIENTATIONS; i++) {
-        auto [buf, mem] = VulkanRuntime::createBuffer(
-            runtime._device,
-            runtime._physicalDevice,
-            bufferSize,
-            vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eDeviceLocal
-        );
-        buf.bindMemory(mem, 0);
-        this->energyBuffers.emplace_back(std::move(buf));
-        this->energyBuffersMemory.emplace_back(std::move(mem));
-    }
 
     auto const fftBufInfo = std::vector{
         vk::DescriptorBufferInfo {
-            .buffer = fftBuf,
+            .buffer = **input.bufIfft,
             .offset = 0,
             .range = sizeof(float) * width * height * 2 * FSIM_ORIENTATIONS * FSIM_SCALES * 3,
         }
@@ -149,7 +134,7 @@ void IQM::GPU::FSIMEstimateEnergy::prepareBufferStorage(const VulkanRuntime &run
 
     std::vector<vk::DescriptorBufferInfo> outBuffers(2 * FSIM_ORIENTATIONS);
     for (int i = 0; i < 2 * FSIM_ORIENTATIONS; i++) {
-        outBuffers[i].buffer = this->energyBuffers[i];
+        outBuffers[i].buffer = **(input.bufEnergy[i]);
         outBuffers[i].offset = 0;
         outBuffers[i].range = bufferSize;
     }
@@ -170,5 +155,5 @@ void IQM::GPU::FSIMEstimateEnergy::prepareBufferStorage(const VulkanRuntime &run
         writeSetIn, writeSetBuf, writeSetSum
     };
 
-    runtime._device.updateDescriptorSets(writes, nullptr);
+    input.device->updateDescriptorSets(writes, nullptr);
 }

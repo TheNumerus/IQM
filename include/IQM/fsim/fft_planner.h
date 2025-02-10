@@ -12,12 +12,14 @@
 
 /**
  * Helper class for creation of VkFFT plans
- * Caches already created kernels for faster computation in (future) batch mode
+ * Caches already created kernels for faster computation in batch mode
  */
-namespace IQM::GPU {
+namespace IQM {
+    struct FSIMInput;
+
     class FftPlanner {
     public:
-        static VkFFTApplication initForward(const VulkanRuntime &runtime, const vk::raii::Fence &fence, const unsigned width, const unsigned height) {
+        static VkFFTApplication initForward(const FSIMInput &input, const unsigned width, const unsigned height) {
             // image size * 2 float components (complex numbers) * 2 batches
             uint64_t bufferSize = width * height * sizeof(float) * 2 * 2;
 
@@ -31,10 +33,10 @@ namespace IQM::GPU {
             fftConfig.size[1] = height;
             fftConfig.bufferSize = &bufferSize;
 
-            VkDevice deviceRef = *runtime._device;
-            VkPhysicalDevice physDeviceRef = *runtime._physicalDevice;
-            VkQueue queueRef = **runtime._queue;
-            VkCommandPool cmdPoolRef = **runtime._commandPool;
+            VkDevice deviceRef = **input.device;
+            VkPhysicalDevice physDeviceRef = **input.physicalDevice;
+            VkQueue queueRef = **input.queue;
+            VkCommandPool cmdPoolRef = **input.commandPool;
             fftConfig.physicalDevice = &physDeviceRef;
             fftConfig.device = &deviceRef;
             fftConfig.queue = &queueRef;
@@ -42,7 +44,7 @@ namespace IQM::GPU {
             fftConfig.numberBatches = 2;
             fftConfig.makeForwardPlanOnly = true;
 
-            VkFence fenceRef = *fence;
+            VkFence fenceRef = **input.fenceFft;
             fftConfig.fence = &fenceRef;
 
             if (createdForwardKernels.contains(dims)) {
@@ -67,7 +69,7 @@ namespace IQM::GPU {
             return fftApp;
         }
 
-        static VkFFTApplication initInverse(const VulkanRuntime &runtime, const vk::raii::Fence &fence, const unsigned width, const unsigned height) {
+        static VkFFTApplication initInverse(const FSIMInput &input, const unsigned width, const unsigned height) {
             // (image size * 2 float components (complex numbers) ) * 16 filters * 3 cases (by itself, times input, times reference)
             uint64_t bufferSizeInverse = width * height * sizeof(float) * 2 * 4 * 4 * 3;
 
@@ -81,10 +83,10 @@ namespace IQM::GPU {
             fftConfigInverse.size[1] = height;
             fftConfigInverse.bufferSize = &bufferSizeInverse;
 
-            VkDevice deviceRef = *runtime._device;
-            VkPhysicalDevice physDeviceRef = *runtime._physicalDevice;
-            VkQueue queueRef = **runtime._queue;
-            VkCommandPool cmdPoolRef = **runtime._commandPool;
+            VkDevice deviceRef = **input.device;
+            VkPhysicalDevice physDeviceRef = **input.physicalDevice;
+            VkQueue queueRef = **input.queue;
+            VkCommandPool cmdPoolRef = **input.commandPool;
             fftConfigInverse.physicalDevice = &physDeviceRef;
             fftConfigInverse.device = &deviceRef;
             fftConfigInverse.queue = &queueRef;
@@ -93,7 +95,7 @@ namespace IQM::GPU {
             fftConfigInverse.makeInversePlanOnly = true;
             fftConfigInverse.normalize = true;
 
-            VkFence fenceRef = *fence;
+            VkFence fenceRef = **input.fenceIfft;
             fftConfigInverse.fence = &fenceRef;
 
             if (createdInverseKernels.contains(dims)) {

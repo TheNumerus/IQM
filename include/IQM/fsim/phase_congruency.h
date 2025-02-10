@@ -10,34 +10,19 @@
 #include <IQM/base/vulkan_runtime.h>
 #include <IQM/base/vulkan_image.h>
 
-namespace IQM::GPU {
+namespace IQM {
+    struct FSIMInput;
+
     class FSIMPhaseCongruency {
     public:
         explicit FSIMPhaseCongruency(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void compute(
-            const VulkanRuntime &runtime,
-            const vk::raii::Buffer &noiseLevels,
-            const std::vector<vk::raii::Buffer> &energyEstimates,
-            const std::vector<std::shared_ptr<VulkanImage>> &filterResInput,
-            const std::vector<std::shared_ptr<VulkanImage>> &filterResRef,
-            int width,
-            int height);
+        void setUpDescriptors(const FSIMInput& input) const;
+        void compute(const FSIMInput &input, unsigned width, unsigned height);
 
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
-
-        std::shared_ptr<VulkanImage> pcInput;
-        std::shared_ptr<VulkanImage> pcRef;
-    private:
-        void prepareImageStorage(
-            const VulkanRuntime &runtime,
-            const vk::raii::Buffer &noiseLevels,
-            const std::vector<vk::raii::Buffer> &energyEstimates,
-            const std::vector<std::shared_ptr<VulkanImage>> &filterRes,
-            int width,
-            int height);
     };
 }
 

@@ -23,7 +23,7 @@
 #endif
 
 #if COMPILE_FSIM
-#include <IQM/fsim.h>
+#include "wrappers/fsim.h"
 #endif
 
 #if COMPILE_FLIP
@@ -80,45 +80,6 @@ void fsim(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const In
     }
 #else
     throw std::runtime_error("FSIM support was not compiled");
-#endif
-}
-
-void flip(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
-#ifdef COMPILE_FLIP
-    IQM::GPU::FLIP flip(vulkan._device);
-
-    auto flip_args = IQM::GPU::FLIPArguments{};
-    if (args.options.contains("--flip-width")) {
-        flip_args.monitor_width = std::stof(args.options.at("--flip-width"));
-    }
-    if (args.options.contains("--flip-res")) {
-        flip_args.monitor_resolution_x = std::stof(args.options.at("--flip-res"));
-    }
-    if (args.options.contains("--flip-distance")) {
-        flip_args.monitor_distance = std::stof(args.options.at("--flip-distance"));
-    }
-
-    if (args.verbose) {
-        std::cout << "FLIP monitor resolution: "<< flip_args.monitor_resolution_x << std::endl
-        << "FLIP monitor distance: "<< flip_args.monitor_distance << std::endl
-        << "FLIP monitor width: "<< flip_args.monitor_width << std::endl;
-    }
-
-    // starts only in debug, needs to init after vulkan
-    initRenderDoc();
-
-    auto start = std::chrono::high_resolution_clock::now();
-    auto result = flip.computeMetric(vulkan, input, reference, flip_args);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // saves capture for debugging
-    finishRenderDoc();
-
-    if (args.verbose) {
-        result.timestamps.print(start, end);
-    }
-#else
-    throw std::runtime_error("FLIP support was not compiled");
 #endif
 }*/
 
@@ -188,7 +149,11 @@ int main(const int argc, const char **argv) {
 #endif
                 break;
             case IQM::Method::FSIM:
-                //fsim(args.value(), vulkan, InputImage{.data = input.data, .width = (int)input.width, .height = (int)input.height}, InputImage{.data = reference.data, .width = (int)reference.width, .height = (int)reference.height});
+#ifdef COMPILE_FSIM
+                fsim_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("FSIM support is not compiled");
+#endif
                 break;
             case IQM::Method::FLIP:
 #ifdef COMPILE_FLIP

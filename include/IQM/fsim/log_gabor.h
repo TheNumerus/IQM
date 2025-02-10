@@ -8,19 +8,19 @@
 
 #include <IQM/base/vulkan_runtime.h>
 
-namespace IQM::GPU {
+namespace IQM {
+    struct FSIMInput;
+
     class FSIMLogGabor {
     public:
         explicit FSIMLogGabor(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void constructFilter(const VulkanRuntime &runtime, const std::shared_ptr<VulkanImage> &lowpass, int width, int height);
+        void setUpDescriptors(const FSIMInput& input) const;
+        void constructFilter(const FSIMInput &input, int width, int height);
 
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;
         vk::raii::Pipeline pipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSet = VK_NULL_HANDLE;
-        std::vector<std::shared_ptr<VulkanImage>> imageLogGaborFilters;
-    private:
-        void prepareImageStorage(const VulkanRuntime &runtime, const std::shared_ptr<VulkanImage> &lowpass, int width, int height);
     };
 }
 

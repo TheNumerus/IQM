@@ -8,14 +8,16 @@
 
 #include <IQM/base/vulkan_runtime.h>
 
-namespace IQM::GPU {
+namespace IQM {
+    struct FSIMInput;
     /**
      * This step takes the presaved filters and computes estimated noise energy
      */
     class FSIMEstimateEnergy {
     public:
         explicit FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void estimateEnergy(const VulkanRuntime &runtime, const vk::raii::Buffer& fftBuf, int width, int height);
+        void estimateEnergy(const FSIMInput& input, unsigned width, unsigned height);
+        void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height);
 
         vk::raii::PipelineLayout estimateEnergyLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline estimateEnergyPipeline = VK_NULL_HANDLE;
@@ -26,11 +28,6 @@ namespace IQM::GPU {
         vk::raii::Pipeline sumPipeline = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout sumDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet sumDescSet = VK_NULL_HANDLE;
-
-        std::vector<vk::raii::Buffer> energyBuffers;
-        std::vector<vk::raii::DeviceMemory> energyBuffersMemory;
-    private:
-        void prepareBufferStorage(const VulkanRuntime& runtime, const vk::raii::Buffer &fftBuf, int width, int height);
     };
 }
 
