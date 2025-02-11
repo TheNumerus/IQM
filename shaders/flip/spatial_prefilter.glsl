@@ -10,11 +10,12 @@
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout(set = 0, binding = 0, rgba32f) uniform readonly image2D input_img[2];
-layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D output_img[2];
+layout(set = 0, binding = 0, rgba32f) uniform writeonly image2D output_img[2];
+layout(set = 0, binding = 1, rgba32f) uniform readonly image2D input_img;
 
 layout( push_constant ) uniform constants {
     float pixels_per_degree;
+    uint index;
 } push_consts;
 
 const mat3 XYZ_TO_RGB = mat3(
@@ -40,11 +41,11 @@ float getGaussValue(float d, vec4 par) {
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
     uint y = gl_WorkGroupID.y * gl_WorkGroupSize.y + gl_LocalInvocationID.y;
-    uint z = gl_WorkGroupID.z;
+    uint z = push_consts.index;
     ivec2 pos = ivec2(x, y);
-    ivec2 size = imageSize(input_img[z]);
+    ivec2 size = imageSize(input_img);
 
-    if (x >= imageSize(input_img[z]).x || y >= imageSize(input_img[z]).y) {
+    if (x >= size.x || y >= size.y) {
         return;
     }
 
@@ -58,7 +59,7 @@ void main() {
     for (int k = -halfSize; k <= halfSize; k++) {
         uint actualY = uint(clamp(int(y) - k, 0, size.y - 1));
 
-        vec3 ycc = imageLoad(input_img[z], ivec2(x, actualY)).xyz;
+        vec3 ycc = imageLoad(input_img, ivec2(x, actualY)).xyz;
 
         float yy = float(k) * deltaX;
         float d = yy * yy;

@@ -72,11 +72,6 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
                     &res.imagesColorTemp[0]->imageView,
                     &res.imagesColorTemp[1]->imageView,
                     &res.imagesColorTemp[2]->imageView,
-                    &res.imagesColorTemp[3]->imageView,
-                    &res.imagesColorTemp[4]->imageView,
-                    &res.imagesColorTemp[5]->imageView,
-                    &res.imagesColorTemp[6]->imageView,
-                    &res.imagesColorTemp[7]->imageView,
                 },
                 .imgOut = &res.imageOut->image,
                 .bufMean = &res.meanBuf,
@@ -190,11 +185,6 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
                 &res.imagesColorTemp[0]->imageView,
                 &res.imagesColorTemp[1]->imageView,
                 &res.imagesColorTemp[2]->imageView,
-                &res.imagesColorTemp[3]->imageView,
-                &res.imagesColorTemp[4]->imageView,
-                &res.imagesColorTemp[5]->imageView,
-                &res.imagesColorTemp[6]->imageView,
-                &res.imagesColorTemp[7]->imageView,
             },
             .imgOut = &res.imageOut->image,
             .bufMean = &res.meanBuf,
@@ -350,7 +340,7 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
     auto imagesColorTemp = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesFloatTemp = std::vector<std::shared_ptr<VulkanImage>>();
 
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 3; i++) {
         imagesColorTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo)));
     }
 

@@ -22,13 +22,12 @@ namespace IQM {
         vk::raii::PipelineLayout csfPrefilterLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline csfPrefilterPipeline = VK_NULL_HANDLE;
         vk::raii::Pipeline csfPrefilterHorizontalPipeline = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout csfPrefilterDescSetLayout = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet csfPrefilterDescSet = VK_NULL_HANDLE;
         vk::raii::DescriptorSet csfPrefilterHorizontalDescSet = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout spatialDetectLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline spatialDetectPipeline = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout spatialDetectDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet spatialDetectDescSet = VK_NULL_HANDLE;
     };
 }

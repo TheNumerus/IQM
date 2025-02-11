@@ -202,6 +202,12 @@ void IQM::FLIP::computeFeatureErrorMap(const FLIPInput& input) {
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->featureDetectLayout, 0, {this->featureDetectDescSet}, {});
 
     input.cmdBuf->dispatch(groupsX, groupsY, 1);
+
+    input.cmdBuf->pipelineBarrier(
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
+    );
 }
 
 void IQM::FLIP::computeFinalErrorMap(const FLIPInput& input) {
@@ -248,7 +254,7 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
 
     auto tempFeatureFilterImageInfos = VulkanRuntime::createImageInfos({
         input.ivTemp[2],
-        input.ivTemp[3],
+        input.ivOut,
     });
 
     auto outFeatureImageInfos = VulkanRuntime::createImageInfos({

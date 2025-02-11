@@ -10,13 +10,13 @@
 #include <vkFFT.h>
 #include <IQM/base/vulkan_runtime.h>
 
-/**
- * Helper class for creation of VkFFT plans
- * Caches already created kernels for faster computation in batch mode
- */
 namespace IQM {
     struct FSIMInput;
 
+    /**
+     * Helper class for creation of VkFFT plans
+     * Caches already created kernels for faster computation in batch mode
+     */
     class FftPlanner {
     public:
         static VkFFTApplication initForward(const FSIMInput &input, const unsigned width, const unsigned height) {

@@ -20,32 +20,19 @@ namespace IQM {
      * Input parameters for FLIP computation.
      *
      * Source image views `ivTest` and `ivRef` are expected to be views into RGBA u8 images of WxH.
-     * Rest of image views are expected to be in R f32 format with dimensions WxH.
+     * Intermediate image views `ivFeatErr`, `ivColorErr` should be in format R f32 with dimensions WxH.
+     * All `ivTemp` image should be in format RGBA f32 with dimensions WxH.
+     * `ivFeatFilter` should be in RGBA f32 format with dimensions Kx1 where K is returned from `featureKernelSize`.
+     * `ivColorFilter` should be in RGBA f32 format with dimensions SxS where S is returned from `spatialKernelSize`.
+     * `ivColorMap` is for coloring the final output, it should be in format RGBA f32, with custom dimensions.
      * All images should be in layout GENERAL.
-     *
-     *    W x H x  4 std::shared_ptr<VulkanImage> imageInput;
-          W x H x  4 std::shared_ptr<VulkanImage> imageRef;
-          W x H x 16 std::shared_ptr<VulkanImage> imageYccInput;
-          W x H x 16 std::shared_ptr<VulkanImage> imageYccRef;
-          W x H x 16 std::shared_ptr<VulkanImage> imageFilterTempInput;
-          W x H x 16 std::shared_ptr<VulkanImage> imageFilterTempRef;
-          W x H x  4 std::shared_ptr<VulkanImage> imageFeatureError;
-        256 x 1 x 16 std::shared_ptr<VulkanImage> imageColorMap;
-          K x 1 x 16 std::shared_ptr<VulkanImage> imageFeatureFilters;
-          W x H x 16 std::shared_ptr<VulkanImage> imageOut;
-          S x S x 16 std::shared_ptr<VulkanImage> csfFilter;
-          W x H x 16 std::shared_ptr<VulkanImage> inputPrefilterTemp;
-          W x H x 16 std::shared_ptr<VulkanImage> refPrefilterTemp;
-          W x H x 16 std::shared_ptr<VulkanImage> inputPrefilter;
-          W x H x 16 std::shared_ptr<VulkanImage> refPrefilter;
-          W x H x  4 std::shared_ptr<VulkanImage> imageColorError;
      */
     struct FLIPInput {
         const FLIPArguments args;
         const vk::raii::Device *device;
         const vk::raii::CommandBuffer *cmdBuf;
         const vk::raii::ImageView *ivTest, *ivRef, *ivOut, *ivColorMap, *ivFeatErr, *ivColorErr, *ivFeatFilter, *ivColorFilter;
-        const vk::raii::ImageView *ivTemp[8];
+        const vk::raii::ImageView *ivTemp[3];
         const vk::raii::Image *imgOut;
         const vk::raii::Buffer *bufMean;
         unsigned width, height;

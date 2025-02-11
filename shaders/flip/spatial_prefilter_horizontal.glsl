@@ -11,10 +11,11 @@
 layout (local_size_x = 16, local_size_y = 16) in;
 
 layout(set = 0, binding = 0, rgba32f) uniform readonly image2D input_img[2];
-layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D output_img[2];
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D output_img;
 
 layout( push_constant ) uniform constants {
     float pixels_per_degree;
+    uint index;
 } push_consts;
 
 const vec4 lumaParams = vec4(1.0, 0.0047, 0, 0.00001);
@@ -28,11 +29,11 @@ float getGaussValue(float d, vec4 par) {
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
     uint y = gl_WorkGroupID.y * gl_WorkGroupSize.y + gl_LocalInvocationID.y;
-    uint z = gl_WorkGroupID.z;
+    uint z = push_consts.index;
     ivec2 pos = ivec2(x, y);
     ivec2 size = imageSize(input_img[z]);
 
-    if (x >= imageSize(input_img[z]).x || y >= imageSize(input_img[z]).y) {
+    if (x >= size.x || y >= size.y) {
         return;
     }
 
@@ -60,5 +61,5 @@ void main() {
 
     opponent /= opponentTotal;
 
-    imageStore(output_img[z], pos, vec4(opponent, 0.0));
+    imageStore(output_img, pos, vec4(opponent, 0.0));
 }
