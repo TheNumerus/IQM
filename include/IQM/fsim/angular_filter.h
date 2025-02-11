@@ -12,7 +12,7 @@ namespace IQM {
     struct FSIMInput;
 
     class FSIMAngularFilter {
-    public:
+        friend class FSIM;
         explicit FSIMAngularFilter(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput& input) const;
         void constructFilter(const FSIMInput &input, unsigned width, unsigned height);

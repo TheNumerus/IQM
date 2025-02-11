@@ -84,8 +84,8 @@ void IQM::FSIMFinalMultiply::computeMetrics(const FSIMInput &input, unsigned wid
 
 void IQM::FSIMFinalMultiply::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height) {
     auto inImageInfos = VulkanRuntime::createImageInfos({input.ivTestDown, input.ivRefDown});
-    auto gradImageInfos = VulkanRuntime::createImageInfos({input.ivTestGrad, input.ivRefGrad});
-    auto pcImageInfos = VulkanRuntime::createImageInfos({input.ivTestPc, input.ivRefPc});
+    auto gradImageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[0], input.ivTempFloat[1]});
+    auto pcImageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[2], input.ivTempFloat[3]});
     auto outImageInfos = VulkanRuntime::createImageInfos(std::vector(std::begin(input.ivFinalSums), std::end(input.ivFinalSums)));
 
     const auto writeSetIn = VulkanRuntime::createWriteSet(
@@ -112,9 +112,10 @@ void IQM::FSIMFinalMultiply::setUpDescriptors(const FSIMInput &input, const unsi
         outImageInfos
     );
 
+    // reuse iFFT buffer, since it's big enough
     auto bufInfo = std::vector{
         vk::DescriptorBufferInfo {
-            .buffer = **input.bufSum,
+            .buffer = **input.bufIfft,
             .offset = 0,
             .range = width * height * sizeof(float),
         }
@@ -164,12 +165,12 @@ void IQM::FSIMFinalMultiply::sumImages(const FSIMInput &input, const unsigned wi
             .imageExtent = vk::Extent3D{static_cast<unsigned>(width), static_cast<unsigned>(height), 1}
         };
 
-        input.cmdBuf->copyImageToBuffer(*input.imgFinalSums[i], vk::ImageLayout::eGeneral, *input.bufSum, {regionTo});
+        input.cmdBuf->copyImageToBuffer(*input.imgFinalSums[i], vk::ImageLayout::eGeneral, *input.bufIfft, {regionTo});
 
         vk::BufferMemoryBarrier barrier = {
             .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
             .dstAccessMask = vk::AccessFlagBits::eShaderRead,
-            .buffer = **input.bufSum,
+            .buffer = **input.bufIfft,
             .offset = 0,
             .size = bufferSize * sizeof(float),
         };
@@ -189,7 +190,7 @@ void IQM::FSIMFinalMultiply::sumImages(const FSIMInput &input, const unsigned wi
             vk::BufferMemoryBarrier barrier = {
                 .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
                 .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eTransferRead,
-                .buffer = **input.bufSum,
+                .buffer = **input.bufIfft,
                 .offset = 0,
                 .size = bufferSize * sizeof(float),
             };
@@ -214,12 +215,12 @@ void IQM::FSIMFinalMultiply::sumImages(const FSIMInput &input, const unsigned wi
             .size = sizeof(float),
         };
 
-        input.cmdBuf->copyBuffer(*input.bufSum, *input.bufOut, {regionFrom});
+        input.cmdBuf->copyBuffer(*input.bufIfft, *input.bufFft, {regionFrom});
 
         barrier = {
             .srcAccessMask = vk::AccessFlagBits::eTransferRead,
             .dstAccessMask = vk::AccessFlagBits::eTransferWrite,
-            .buffer = *input.bufSum,
+            .buffer = *input.bufIfft,
             .offset = 0,
             .size = bufferSize * sizeof(float),
         };

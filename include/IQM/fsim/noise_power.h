@@ -7,14 +7,15 @@
 #define FSIM_NOISE_POWER_H
 
 #include <IQM/base/vulkan_runtime.h>
+#include <IQM/fsim/partitions.h>
 
 namespace IQM {
     struct FSIMInput;
 
     class FSIMNoisePower {
-    public:
+        friend class FSIM;
         explicit FSIMNoisePower(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height) const;
+        void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height, const FftBufferPartitions& partitions) const;
         void computeNoisePower(const FSIMInput &input, unsigned width, unsigned height);
 
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;

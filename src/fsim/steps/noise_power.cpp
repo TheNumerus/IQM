@@ -173,7 +173,7 @@ void IQM::FSIMNoisePower::computeNoisePower(const FSIMInput &input, const unsign
     }
 }
 
-void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height) const {
+void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height, const FftBufferPartitions& partitions) const {
     uint32_t sortGlobalInvocationSize = (width * height) / 32;
     uint32_t remainder = (width * height) % 32;
     sortGlobalInvocationSize += remainder > 0 ? 1 : 0;
@@ -189,43 +189,46 @@ void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigne
         }
     };
 
+    // sorting can be safely done in FFT buffer, since it must be big enough
     auto bufInfoOut = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = *input.bufSort,
+            .buffer = *input.bufFft,
             .offset = 0,
-            .range = width * height * sizeof(float) * FSIM_ORIENTATIONS * 2,
+            .range = partitions.sortTemp - partitions.sort,
         }
     };
 
     auto bufInfoSortTemp = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = *input.bufSortTemp,
-            .offset = 0,
-            .range = width * height * sizeof(float) * FSIM_ORIENTATIONS * 2,
+            .buffer = *input.bufFft,
+            .offset = partitions.sortTemp,
+            .range = partitions.sortHist - partitions.sortTemp,
         }
     };
 
     auto bufInfoSortHist = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = *input.bufSortHist,
-            .offset = 0,
-            .range = histBufSize,
+            .buffer = *input.bufFft,
+            .offset = partitions.sortHist,
+            .range = partitions.noiseLevels - partitions.sortHist,
         }
     };
 
+    // this is saved just after the space needed for sort
     auto bufInfoFilterSums = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = **input.bufNoiseLevels,
-            .offset = 0,
-            .range = FSIM_ORIENTATIONS * sizeof(float),
+            .buffer = *input.bufFft,
+            .offset = partitions.noiseLevels,
+            .range = partitions.noisePowers - partitions.noiseLevels,
         }
     };
 
+    // store even further
     auto bufInfoNoisePower = std::vector {
         vk::DescriptorBufferInfo {
-            .buffer = **input.bufNoisePowers,
-            .offset = 0,
-            .range = 2 * FSIM_ORIENTATIONS * sizeof(float),
+            .buffer = **input.bufFft,
+            .offset = partitions.noisePowers,
+            .range = partitions.end - partitions.noisePowers,
         }
     };
 

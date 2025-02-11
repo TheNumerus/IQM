@@ -112,6 +112,7 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
 
     for (const auto& match : imageMatches) {
         try {
+            VulkanResource::resetMemCounter();
             Timestamps timestamps;
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -190,6 +191,8 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
             std::cout << match.testPath << ": " << result.mssim << std::endl;
             if (args.verbose) {
                 timestamps.print(start, end);
+                double mbSize = static_cast<double>(VulkanResource::memCounter()) / 1024 / 1024;
+                std::cout << "VRAM used for resources: " << mbSize << " MB" << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "Failed to process '" << match.testPath << "': " << e.what() << std::endl;

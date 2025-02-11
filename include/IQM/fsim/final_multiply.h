@@ -12,7 +12,7 @@ namespace IQM {
     struct FSIMInput;
 
     class FSIMFinalMultiply {
-    public:
+        friend class FSIM;
         explicit FSIMFinalMultiply(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput &input, unsigned width, unsigned height);
         void computeMetrics(const FSIMInput &input, unsigned width, unsigned height);

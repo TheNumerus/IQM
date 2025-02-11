@@ -41,7 +41,7 @@ IQM::FSIMLowpassFilter::FSIMLowpassFilter(const vk::raii::Device &device, const 
 }
 
 void IQM::FSIMLowpassFilter::setUpDescriptors(const FSIMInput &input) const {
-    auto imageInfos = VulkanRuntime::createImageInfos({input.ivLowpass});
+    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[0]});
 
     const auto writeSet = VulkanRuntime::createWriteSet(
         descSet,

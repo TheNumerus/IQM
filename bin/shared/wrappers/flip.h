@@ -32,7 +32,7 @@ namespace IQM::Bin {
         // 2x R f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesFloatTemp;
 
-        // 8x RGBA f32 intermediate images
+        // 3x RGBA f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesColorTemp;
 
         // 2x RGBA f32 filters,

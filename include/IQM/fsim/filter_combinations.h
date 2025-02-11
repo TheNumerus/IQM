@@ -7,6 +7,7 @@
 #define FSIM_FILTER_COMBINATIONS_H
 
 #include <IQM/base/vulkan_runtime.h>
+#include <IQM/fsim/partitions.h>
 
 namespace IQM {
     struct FSIMInput;
@@ -28,10 +29,10 @@ namespace IQM {
      *   ... ]
      */
     class FSIMFilterCombinations {
-    public:
+        friend class FSIM;
         explicit FSIMFilterCombinations(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput &input, unsigned width, unsigned height);
-        void combineFilters(const FSIMInput &input, unsigned width, unsigned height);
+        void combineFilters(const FSIMInput &input, unsigned width, unsigned height, const FftBufferPartitions& partitions);
 
         vk::raii::PipelineLayout multPackLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline multPackPipeline = VK_NULL_HANDLE;

@@ -25,7 +25,7 @@ namespace IQM::Bin {
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
 
-        // 16x R f32 intermediate images
+        // 9x R f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesFloat;
         // 8x RG f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesRg;
@@ -36,22 +36,6 @@ namespace IQM::Bin {
         vk::raii::DeviceMemory memFft = VK_NULL_HANDLE;
         vk::raii::Buffer bufIfft = VK_NULL_HANDLE;
         vk::raii::DeviceMemory memIfft = VK_NULL_HANDLE;
-        vk::raii::Buffer bufSort = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memSort = VK_NULL_HANDLE;
-        vk::raii::Buffer bufSortTemp = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memSortTemp = VK_NULL_HANDLE;
-        vk::raii::Buffer bufSortHist = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memSortHist = VK_NULL_HANDLE;
-        vk::raii::Buffer bufNoiseLevels = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memNoiseLevels = VK_NULL_HANDLE;
-        vk::raii::Buffer bufNoisePowers = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memNoisePowers = VK_NULL_HANDLE;
-        vk::raii::Buffer bufSum = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memSum = VK_NULL_HANDLE;
-        std::vector<vk::raii::Buffer> bufEnergy;
-        std::vector<vk::raii::DeviceMemory> memEnergy;
-        vk::raii::Buffer bufOut = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory memOut = VK_NULL_HANDLE;
 
         vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
         vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
@@ -70,7 +54,7 @@ namespace IQM::Bin {
     void fsim_run(const IQM::Bin::Args& args, const IQM::VulkanInstance& instance, const std::vector<Match>& imageMatches);
     void fsim_run_single(const IQM::ProfileArgs& args, const IQM::VulkanInstance& instance, IQM::FSIM& fsim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref);
 
-    FSIMResources fsim_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance, unsigned dWidth, unsigned dHeight, unsigned histBufSize);
+    FSIMResources fsim_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance, unsigned dWidth, unsigned dHeight);
     void fsim_upload(const IQM::VulkanInstance& instance, const FSIMResources& res);
     FSIMResult fsim_copy_back(const IQM::VulkanInstance& instance, const FSIMResources& res, Timestamps &timestamps);
 }

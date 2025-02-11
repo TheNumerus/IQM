@@ -25,7 +25,7 @@ void main() {
     uint x = (gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x) * 2;
     uint z = gl_WorkGroupID.z;
 
-    if (x >= push_consts.size) {
+    if (x/2 >= push_consts.size) {
         return;
     }
 

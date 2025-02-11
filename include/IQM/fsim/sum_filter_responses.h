@@ -15,7 +15,7 @@ namespace IQM {
      * This steps takes the inverse FFT images and computes total energy and amplitude per orientation.
      */
     class FSIMSumFilterResponses {
-    public:
+        friend class FSIM;
         explicit FSIMSumFilterResponses(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height);
         void computeSums(const FSIMInput& input, unsigned width, unsigned height);

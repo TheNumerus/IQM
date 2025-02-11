@@ -94,7 +94,7 @@ void IQM::FSIMEstimateEnergy::estimateEnergy(const FSIMInput& input, const unsig
             vk::BufferMemoryBarrier barrier = {
                 .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
                 .dstAccessMask = vk::AccessFlagBits::eShaderRead,
-                .buffer = *input.bufEnergy[o],
+                .buffer = *input.bufIfft,
                 .offset = 0,
                 .size = bufferSize * sizeof(float),
             };
@@ -132,10 +132,12 @@ void IQM::FSIMEstimateEnergy::setUpDescriptors(const FSIMInput& input, const uns
         fftBufInfo
     );
 
+    // in this phase of computation, latter 2/3 of iFFT buffer are unused, so reuse them for energy computation
     std::vector<vk::DescriptorBufferInfo> outBuffers(2 * FSIM_ORIENTATIONS);
+    uint32_t baseOffset = width * height * sizeof(float) * 2 * FSIM_ORIENTATIONS * FSIM_SCALES;
     for (int i = 0; i < 2 * FSIM_ORIENTATIONS; i++) {
-        outBuffers[i].buffer = **(input.bufEnergy[i]);
-        outBuffers[i].offset = 0;
+        outBuffers[i].buffer = **input.bufIfft;
+        outBuffers[i].offset = baseOffset + i * bufferSize;
         outBuffers[i].range = bufferSize;
     }
 

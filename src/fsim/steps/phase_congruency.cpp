@@ -49,8 +49,8 @@ void IQM::FSIMPhaseCongruency::compute(const FSIMInput &input, const unsigned wi
     input.cmdBuf->dispatch(groupsX, groupsY, 2);
 }
 
-void IQM::FSIMPhaseCongruency::setUpDescriptors(const FSIMInput &input) const {
-    auto images = VulkanRuntime::createImageInfos({input.ivTestPc, input.ivRefPc});
+void IQM::FSIMPhaseCongruency::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height, const FftBufferPartitions& partitions) const {
+    auto images = VulkanRuntime::createImageInfos({input.ivTempFloat[2], input.ivTempFloat[3]});
 
     const auto writePc = VulkanRuntime::createWriteSet(
         this->descSet,
@@ -60,8 +60,8 @@ void IQM::FSIMPhaseCongruency::setUpDescriptors(const FSIMInput &input) const {
 
     auto noiseBuf = std::vector{
         vk::DescriptorBufferInfo {
-            .buffer = **input.bufNoisePowers,
-            .offset = 0,
+            .buffer = **input.bufFft,
+            .offset = partitions.noisePowers,
             .range = 2 * FSIM_ORIENTATIONS * sizeof(float),
          }
     };
@@ -72,10 +72,13 @@ void IQM::FSIMPhaseCongruency::setUpDescriptors(const FSIMInput &input) const {
         noiseBuf
     );
 
+    // in this phase of computation, latter 2/3 of iFFT buffer are unused, so reuse them for energy computation
     std::vector<vk::DescriptorBufferInfo> energyBufs(2 * FSIM_ORIENTATIONS);
+    uint32_t baseOffset = width * height * sizeof(float) * 2 * FSIM_ORIENTATIONS * FSIM_SCALES;
+    uint32_t offset = width * height * sizeof(float);
     for (int i = 0; i < 2 * FSIM_ORIENTATIONS; i++) {
-        energyBufs[i].buffer = *input.bufEnergy[i];
-        energyBufs[i].offset = 0;
+        energyBufs[i].buffer = *input.bufIfft;
+        energyBufs[i].offset = baseOffset + i * offset;
         energyBufs[i].range = sizeof(float);
     }
 

@@ -91,7 +91,17 @@ void IQM::FSIM::computeMetric(const FSIMInput &input) {
     const auto widthDownscale = static_cast<int>(std::round(static_cast<float>(input.width) / static_cast<float>(F)));
     const auto heightDownscale = static_cast<int>(std::round(static_cast<float>(input.height) / static_cast<float>(F)));
 
-    this->initDescriptors(input);
+    const auto sortSize = (widthDownscale * heightDownscale) * sizeof(float);
+    FftBufferPartitions partitions {
+        .sort = 0,
+        .sortTemp = sortSize,
+        .sortHist = 2 * sortSize,
+        .noiseLevels = 2 * sortSize + sortBufSize(widthDownscale, heightDownscale),
+        .noisePowers = 2 * sortSize + sortBufSize(widthDownscale, heightDownscale) + FSIM_ORIENTATIONS * sizeof(float),
+        .end = 2 * sortSize + sortBufSize(widthDownscale, heightDownscale) + FSIM_ORIENTATIONS * sizeof(float) + 2 * FSIM_ORIENTATIONS * sizeof(float),
+    };
+
+    this->initDescriptors(input, partitions);
 
     this->computeDownscaledImages(input, F, widthDownscale, heightDownscale);
     this->lowpassFilter.constructFilter(input, widthDownscale, heightDownscale);
@@ -110,7 +120,6 @@ void IQM::FSIM::computeMetric(const FSIMInput &input) {
         nullptr
     );
 
-    this->createGradientMap(input, widthDownscale, heightDownscale);
     this->logGaborFilter.constructFilter(input, widthDownscale, heightDownscale);
     this->angularFilter.constructFilter(input, widthDownscale, heightDownscale);
 
@@ -124,11 +133,12 @@ void IQM::FSIM::computeMetric(const FSIMInput &input) {
     );
 
     this->computeFft(input, widthDownscale, heightDownscale);
-    this->combinations.combineFilters(input, widthDownscale, heightDownscale);
+    this->combinations.combineFilters(input, widthDownscale, heightDownscale, partitions);
     this->computeMassInverseFft(input);
     this->sumFilterResponses.computeSums(input, widthDownscale, heightDownscale);;
     this->noise_power.computeNoisePower(input, widthDownscale, heightDownscale);
     this->estimateEnergy.estimateEnergy(input, widthDownscale, heightDownscale);
+    this->createGradientMap(input, widthDownscale, heightDownscale);
     this->phaseCongruency.compute(input, widthDownscale, heightDownscale);
     this->final_multiply.computeMetrics(input, widthDownscale, heightDownscale);
 }
@@ -155,7 +165,7 @@ int IQM::FSIM::computeDownscaleFactor(const int width, const int height) {
     return std::max(1, static_cast<int>(std::round(smallerDim / 256.0)));
 }
 
-void IQM::FSIM::initDescriptors(const FSIMInput &input) {
+void IQM::FSIM::initDescriptors(const FSIMInput &input, const FftBufferPartitions& partitions) {
     auto [dWidth, dHeight] = downscaledSize(input.width, input.height);
 
     auto imageInfosInput = VulkanRuntime::createImageInfos({
@@ -170,12 +180,12 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input) {
 
     auto imageInfosGradIn = VulkanRuntime::createImageInfos({
         input.ivTestDown,
-        input.ivTestGrad,
+        input.ivTempFloat[0],
     });
 
     auto imageInfosGradRef = VulkanRuntime::createImageInfos({
         input.ivRefDown,
-        input.ivRefGrad,
+        input.ivTempFloat[1],
     });
 
     auto writeSetInput = VulkanRuntime::createWriteSet(
@@ -258,8 +268,8 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input) {
     this->sumFilterResponses.setUpDescriptors(input, dWidth, dHeight);
     this->final_multiply.setUpDescriptors(input, dWidth, dHeight);
     this->combinations.setUpDescriptors(input, dWidth, dHeight);
-    this->noise_power.setUpDescriptors(input, dWidth, dHeight);
-    this->phaseCongruency.setUpDescriptors(input);
+    this->noise_power.setUpDescriptors(input, dWidth, dHeight, partitions);
+    this->phaseCongruency.setUpDescriptors(input, dWidth, dHeight, partitions);
 }
 
 void IQM::FSIM::computeDownscaledImages(const FSIMInput &input, int factor, int width, int height) {

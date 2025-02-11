@@ -17,6 +17,7 @@
 #include <IQM/fsim/noise_power.h>
 #include <IQM/fsim/phase_congruency.h>
 #include <IQM/fsim/sum_filter_responses.h>
+#include <IQM/fsim/partitions.h>
 
 namespace IQM {
     constexpr int FSIM_ORIENTATIONS = 4;
@@ -25,11 +26,23 @@ namespace IQM {
     /**
      * ## Images with format RGBA u8 | (WxH)
      * - *ivTest, *ivRef
+     * ## Images with format RGBA u8 | D(WxH)
+     * - *ivTestDown, *ivRefDown
      * ## Images with format R f32 | D(WxH)
-     * - *ivAngular[4], ivScales[4], *ivTestGrad, *ivRefGrad, *ivTestPc, *ivRefPc, *ivLowpass, *ivFinalSums[3]
+     * - *ivFinalSums[3], *ivTempFloat[6]
      * ## Images with format RG f32 | D(WxH)
      * - *ivFilterResponsesTest[4]
      * - *ivFilterResponsesRef[4]
+     *
+     * Both supplied buffers are primarily used for FFT computation,
+     * but after that are reused for other work, such as parallel sums or sorts.
+     *
+     * `bufFft` must have size D(WxH) x sizeof(float) x 4
+     * `bufIfft` must have size D(WxH) x sizeof(float) x 96
+     *
+     * After finishing, output values FSIM and FSIM can be computed from values in `bufFft`:
+     *  - FSIM = bufFft[1] / bufFft[0];
+     *  - FSIMc = bufFft[2] / bufFft[0];
      */
     struct FSIMInput {
         const vk::raii::Device *device;
@@ -38,15 +51,13 @@ namespace IQM {
         const vk::raii::CommandPool *commandPool;
         const vk::raii::CommandBuffer *cmdBuf;
         const vk::raii::Fence *fenceFft, *fenceIfft;
-        const vk::raii::ImageView *ivTest, *ivRef, *ivTestDown, *ivRefDown, *ivTestGrad, *ivRefGrad, *ivTestPc, *ivRefPc, *ivLowpass;
-        const vk::raii::ImageView *ivAngular[FSIM_ORIENTATIONS];
-        const vk::raii::ImageView *ivScales[FSIM_SCALES];
+        const vk::raii::ImageView *ivTest, *ivRef, *ivTestDown, *ivRefDown;
+        const vk::raii::ImageView *ivTempFloat[6];
         const vk::raii::ImageView *ivFilterResponsesTest[FSIM_ORIENTATIONS];
         const vk::raii::ImageView *ivFilterResponsesRef[FSIM_ORIENTATIONS];
         const vk::raii::ImageView *ivFinalSums[3];
         const vk::raii::Image *imgFinalSums[3];
-        const vk::raii::Buffer *bufFft, *bufIfft, *bufSort, *bufSortTemp, *bufSortHist, *bufNoiseLevels, *bufNoisePowers, *bufSum, *bufOut;
-        const vk::raii::Buffer *bufEnergy[2 * FSIM_ORIENTATIONS];
+        const vk::raii::Buffer *bufFft, *bufIfft;
         // FFT lib
         VkFFTApplication *fftApplication;
         VkFFTApplication *fftApplicationInverse;
@@ -59,15 +70,16 @@ namespace IQM {
         void computeMetric(const FSIMInput& input);
 
         static std::pair<unsigned, unsigned> downscaledSize(unsigned width, unsigned height);
-        static unsigned sortBufSize(unsigned dWidth, unsigned dHeight);
 
     private:
-        void initDescriptors(const FSIMInput& input);
+        void initDescriptors(const FSIMInput& input, const FftBufferPartitions& partitions);
         static int computeDownscaleFactor(int width, int height);
         void computeDownscaledImages(const FSIMInput& input, int factor, int width, int height);
         void createGradientMap(const FSIMInput& input, int, int);
         void computeFft(const FSIMInput& input, unsigned width, unsigned height);
         void computeMassInverseFft(const FSIMInput& input);
+
+        static unsigned sortBufSize(unsigned dWidth, unsigned dHeight);
 
         vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
 

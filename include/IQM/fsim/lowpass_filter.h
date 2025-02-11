@@ -12,7 +12,7 @@ namespace IQM {
     struct FSIMInput;
 
     class FSIMLowpassFilter {
-    public:
+        friend class FSIM;
         explicit FSIMLowpassFilter(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput& input) const;
         void constructFilter(const FSIMInput &input, int width, int height);

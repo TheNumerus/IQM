@@ -8,14 +8,15 @@
 #include <memory>
 
 #include <IQM/base/vulkan_runtime.h>
+#include <IQM/fsim/partitions.h>
 
 namespace IQM {
     struct FSIMInput;
 
     class FSIMPhaseCongruency {
-    public:
+        friend class FSIM;
         explicit FSIMPhaseCongruency(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
-        void setUpDescriptors(const FSIMInput& input) const;
+        void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height, const FftBufferPartitions& partitions) const;
         void compute(const FSIMInput &input, unsigned width, unsigned height);
 
         vk::raii::PipelineLayout layout = VK_NULL_HANDLE;

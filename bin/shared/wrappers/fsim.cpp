@@ -18,6 +18,7 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
 
     for (const auto& match : imageMatches) {
         try {
+            VulkanResource::resetMemCounter();
             Timestamps timestamps;
             auto start = std::chrono::high_resolution_clock::now();
 
@@ -32,9 +33,8 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
             initRenderDoc();
 
             auto [dWidth, dHeight] = FSIM::downscaledSize(input.width, input.height);
-            auto histBufSize = FSIM::sortBufSize(dWidth, dHeight);
 
-            auto res = fsim_init_res(input, reference, instance, dWidth, dHeight, histBufSize);
+            auto res = fsim_init_res(input, reference, instance, dWidth, dHeight);
             timestamps.mark("resources allocated");
 
             fsim_upload(instance, res);
@@ -51,22 +51,13 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                 .ivRef = &res.imageRef->imageView,
                 .ivTestDown = &res.imagesColor[0]->imageView,
                 .ivRefDown = &res.imagesColor[1]->imageView,
-                .ivTestGrad = &res.imagesFloat[0]->imageView,
-                .ivRefGrad = &res.imagesFloat[1]->imageView,
-                .ivTestPc = &res.imagesFloat[2]->imageView,
-                .ivRefPc = &res.imagesFloat[3]->imageView,
-                .ivLowpass = &res.imagesFloat[4]->imageView,
-                .ivAngular = {
+                .ivTempFloat = {
+                    &res.imagesFloat[0]->imageView,
+                    &res.imagesFloat[1]->imageView,
+                    &res.imagesFloat[2]->imageView,
+                    &res.imagesFloat[3]->imageView,
+                    &res.imagesFloat[4]->imageView,
                     &res.imagesFloat[5]->imageView,
-                    &res.imagesFloat[6]->imageView,
-                    &res.imagesFloat[7]->imageView,
-                    &res.imagesFloat[8]->imageView,
-                },
-                .ivScales = {
-                    &res.imagesFloat[9]->imageView,
-                    &res.imagesFloat[10]->imageView,
-                    &res.imagesFloat[11]->imageView,
-                    &res.imagesFloat[12]->imageView,
                 },
                 .ivFilterResponsesTest = {
                     &res.imagesRg[0]->imageView,
@@ -81,34 +72,17 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                     &res.imagesRg[7]->imageView,
                 },
                 .ivFinalSums = {
-                    &res.imagesFloat[13]->imageView,
-                    &res.imagesFloat[14]->imageView,
-                    &res.imagesFloat[15]->imageView,
+                    &res.imagesFloat[6]->imageView,
+                    &res.imagesFloat[7]->imageView,
+                    &res.imagesFloat[8]->imageView,
                 },
                 .imgFinalSums = {
-                    &res.imagesFloat[13]->image,
-                    &res.imagesFloat[14]->image,
-                    &res.imagesFloat[15]->image,
+                    &res.imagesFloat[6]->image,
+                    &res.imagesFloat[7]->image,
+                    &res.imagesFloat[8]->image,
                 },
                 .bufFft = &res.bufFft,
                 .bufIfft = &res.bufIfft,
-                .bufSort = &res.bufSort,
-                .bufSortTemp = &res.bufSortTemp,
-                .bufSortHist = &res.bufSortHist,
-                .bufNoiseLevels = &res.bufNoiseLevels,
-                .bufNoisePowers = &res.bufNoisePowers,
-                .bufSum = &res.bufSum,
-                .bufOut = &res.bufOut,
-                .bufEnergy = {
-                    &res.bufEnergy[0],
-                    &res.bufEnergy[1],
-                    &res.bufEnergy[2],
-                    &res.bufEnergy[3],
-                    &res.bufEnergy[4],
-                    &res.bufEnergy[5],
-                    &res.bufEnergy[6],
-                    &res.bufEnergy[7],
-                },
                 .width = input.width,
                 .height = input.height,
             };
@@ -159,6 +133,8 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
             std::cout << match.testPath << ": " << result.fsim << " | " << result.fsimc << std::endl;
             if (args.verbose) {
                 timestamps.print(start, end);
+                double mbSize = static_cast<double>(VulkanResource::memCounter()) / 1024 / 1024;
+                std::cout << "VRAM used for resources: " << mbSize << " MB" << std::endl;
             }
         } catch (const std::exception& e) {
             std::cerr << "Failed to process '" << match.testPath << "': " << e.what() << std::endl;
@@ -182,9 +158,8 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
         initRenderDoc();
 
         auto [dWidth, dHeight] = FSIM::downscaledSize(input.width, input.height);
-        auto histBufSize = FSIM::sortBufSize(dWidth, dHeight);
 
-        auto res = fsim_init_res(input, ref, instance, dWidth, dHeight, histBufSize);
+        auto res = fsim_init_res(input, ref, instance, dWidth, dHeight);
         timestamps.mark("resources allocated");
 
         fsim_upload(instance, res);
@@ -201,22 +176,13 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
             .ivRef = &res.imageRef->imageView,
             .ivTestDown = &res.imagesColor[0]->imageView,
             .ivRefDown = &res.imagesColor[1]->imageView,
-            .ivTestGrad = &res.imagesFloat[0]->imageView,
-            .ivRefGrad = &res.imagesFloat[1]->imageView,
-            .ivTestPc = &res.imagesFloat[2]->imageView,
-            .ivRefPc = &res.imagesFloat[3]->imageView,
-            .ivLowpass = &res.imagesFloat[4]->imageView,
-            .ivAngular = {
+            .ivTempFloat = {
+                &res.imagesFloat[0]->imageView,
+                &res.imagesFloat[1]->imageView,
+                &res.imagesFloat[2]->imageView,
+                &res.imagesFloat[3]->imageView,
+                &res.imagesFloat[4]->imageView,
                 &res.imagesFloat[5]->imageView,
-                &res.imagesFloat[6]->imageView,
-                &res.imagesFloat[7]->imageView,
-                &res.imagesFloat[8]->imageView,
-            },
-            .ivScales = {
-                &res.imagesFloat[9]->imageView,
-                &res.imagesFloat[10]->imageView,
-                &res.imagesFloat[11]->imageView,
-                &res.imagesFloat[12]->imageView,
             },
             .ivFilterResponsesTest = {
                 &res.imagesRg[0]->imageView,
@@ -231,34 +197,17 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
                 &res.imagesRg[7]->imageView,
             },
             .ivFinalSums = {
-                &res.imagesFloat[13]->imageView,
-                &res.imagesFloat[14]->imageView,
-                &res.imagesFloat[15]->imageView,
+                &res.imagesFloat[6]->imageView,
+                &res.imagesFloat[7]->imageView,
+                &res.imagesFloat[8]->imageView,
             },
             .imgFinalSums = {
-                &res.imagesFloat[13]->image,
-                &res.imagesFloat[14]->image,
-                &res.imagesFloat[15]->image,
+                &res.imagesFloat[6]->image,
+                &res.imagesFloat[7]->image,
+                &res.imagesFloat[8]->image,
             },
             .bufFft = &res.bufFft,
             .bufIfft = &res.bufIfft,
-            .bufSort = &res.bufSort,
-            .bufSortTemp = &res.bufSortTemp,
-            .bufSortHist = &res.bufSortHist,
-            .bufNoiseLevels = &res.bufNoiseLevels,
-            .bufNoisePowers = &res.bufNoisePowers,
-            .bufSum = &res.bufSum,
-            .bufOut = &res.bufOut,
-            .bufEnergy = {
-                &res.bufEnergy[0],
-                &res.bufEnergy[1],
-                &res.bufEnergy[2],
-                &res.bufEnergy[3],
-                &res.bufEnergy[4],
-                &res.bufEnergy[5],
-                &res.bufEnergy[6],
-                &res.bufEnergy[7],
-            },
             .width = input.width,
             .height = input.height,
         };
@@ -318,7 +267,7 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
     }
 }
 
-IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance, const unsigned dWidth, const unsigned dHeight, const unsigned histBufSize) {
+IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance& instance, const unsigned dWidth, const unsigned dHeight) {
     // always 4 channels on input, with 1B per channel
     const auto inputSize = (test.width * test.height) * 4;
 
@@ -352,11 +301,6 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     // rest of buffers
     const auto fftSize = sizeof(float) * (dWidth * dHeight) * 2 * 2;
     const auto ifftSize = sizeof(float) * (dWidth * dHeight) * 2 * FSIM_ORIENTATIONS * FSIM_SCALES * 3;
-    const auto sortSize = sizeof(float) * (dWidth * dHeight) * FSIM_ORIENTATIONS * 2;
-    const auto noiseLevelsSize = sizeof(float) * (FSIM_ORIENTATIONS + (dWidth * dHeight * 2 * 2));
-    const auto noisePowersSize = sizeof(float) * 2 * FSIM_ORIENTATIONS;
-    const auto energyBufferSize = sizeof(float) * dWidth * dHeight;
-    const auto outSize = sizeof(float) * 3;
 
     auto [fftBuf, fftMem] = VulkanResource::createBuffer(
         *instance.device(),
@@ -374,80 +318,6 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
     ifftBuf.bindMemory(ifftMem, 0);
-    auto [sortBuf, sortMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        sortSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    sortBuf.bindMemory(sortMem, 0);
-    auto [sortTempBuf, sortTempMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        sortSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    sortTempBuf.bindMemory(sortTempMem, 0);
-    auto [sortHistBuf, sortHistMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        histBufSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    sortHistBuf.bindMemory(sortHistMem, 0);
-    auto [noiseLevelsBuf, noiseLevelsMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        noiseLevelsSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    noiseLevelsBuf.bindMemory(noiseLevelsMem, 0);
-    auto [noisePowersBuf, noisePowersMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        noisePowersSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    noisePowersBuf.bindMemory(noisePowersMem, 0);
-
-    auto energyBufs = std::vector<vk::raii::Buffer>();
-    auto energyMems = std::vector<vk::raii::DeviceMemory>();
-    for (int i = 0; i < 8; i++) {
-        auto [energyBuf, energyMem] = VulkanResource::createBuffer(
-            *instance.device(),
-            *instance.physicalDevice(),
-            energyBufferSize,
-            vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-            vk::MemoryPropertyFlagBits::eDeviceLocal
-        );
-        energyBuf.bindMemory(energyMem, 0);
-
-        energyBufs.emplace_back(std::move(energyBuf));
-        energyMems.emplace_back(std::move(energyMem));
-    }
-
-    auto [sumBuf, sumMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        energyBufferSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    sumBuf.bindMemory(sumMem, 0);
-
-    auto [outBuf, outMem] = VulkanResource::createBuffer(
-        *instance.device(),
-        *instance.physicalDevice(),
-        outSize,
-        vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-        vk::MemoryPropertyFlagBits::eDeviceLocal
-    );
-    outBuf.bindMemory(outMem, 0);
 
     // images
     vk::ImageCreateInfo srcImageInfo = {
@@ -484,7 +354,7 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     auto imagesRg = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesColor = std::vector<std::shared_ptr<VulkanImage>>();
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 9; i++) {
         imagesFloat.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo)));
     }
 
@@ -510,22 +380,6 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
         .memFft = std::move(fftMem),
         .bufIfft = std::move(ifftBuf),
         .memIfft = std::move(ifftMem),
-        .bufSort = std::move(sortBuf),
-        .memSort = std::move(sortMem),
-        .bufSortTemp = std::move(sortTempBuf),
-        .memSortTemp = std::move(sortTempMem),
-        .bufSortHist = std::move(sortHistBuf),
-        .memSortHist = std::move(sortHistMem),
-        .bufNoiseLevels = std::move(noiseLevelsBuf),
-        .memNoiseLevels = std::move(noiseLevelsMem),
-        .bufNoisePowers = std::move(noisePowersBuf),
-        .memNoisePowers = std::move(noisePowersMem),
-        .bufSum = std::move(sumBuf),
-        .memSum = std::move(sumMem),
-        .bufEnergy = std::move(energyBufs),
-        .memEnergy = std::move(energyMems),
-        .bufOut = std::move(outBuf),
-        .memOut = std::move(outMem),
         .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
@@ -592,7 +446,7 @@ IQM::Bin::FSIMResult IQM::Bin::fsim_copy_back(const VulkanInstance& instance, co
         .dstOffset = 0,
         .size = 3 * sizeof(float),
     };
-    instance.cmdBufTransfer()->copyBuffer(res.bufOut, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.bufFft, res.stgInput, bufCopy);
 
     instance.cmdBufTransfer()->end();
 

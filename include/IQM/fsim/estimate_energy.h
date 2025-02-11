@@ -14,7 +14,7 @@ namespace IQM {
      * This step takes the presaved filters and computes estimated noise energy
      */
     class FSIMEstimateEnergy {
-    public:
+        friend class FSIM;
         explicit FSIMEstimateEnergy(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void estimateEnergy(const FSIMInput& input, unsigned width, unsigned height);
         void setUpDescriptors(const FSIMInput& input, unsigned width, unsigned height);

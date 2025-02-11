@@ -37,8 +37,8 @@ IQM::FSIMLogGabor::FSIMLogGabor(const vk::raii::Device &device, const vk::raii::
 }
 
 void IQM::FSIMLogGabor::setUpDescriptors(const FSIMInput &input) const {
-    auto imageInfosLowpass = VulkanRuntime::createImageInfos({input.ivLowpass});
-    auto imageInfos = VulkanRuntime::createImageInfos(std::vector(std::begin(input.ivScales), std::end(input.ivScales)));
+    auto imageInfosLowpass = VulkanRuntime::createImageInfos({input.ivTempFloat[0]});
+    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3], input.ivTempFloat[4]});
 
     const auto writeSetLowpass = VulkanRuntime::createWriteSet(
         this->descSet,

@@ -56,7 +56,7 @@ IQM::FSIMFilterCombinations::FSIMFilterCombinations(const vk::raii::Device &devi
     this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 }
 
-void IQM::FSIMFilterCombinations::combineFilters(const FSIMInput &input, const unsigned width, const unsigned height) {
+void IQM::FSIMFilterCombinations::combineFilters(const FSIMInput &input, const unsigned width, const unsigned height, const FftBufferPartitions& partitions) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->multPackPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->multPackLayout, 0, {this->multPackDescSet}, {});
 
@@ -86,7 +86,7 @@ void IQM::FSIMFilterCombinations::combineFilters(const FSIMInput &input, const u
             .dstOffset = n * sizeof(float),
             .size = bufferSize * sizeof(float),
         };
-        input.cmdBuf->copyBuffer(*input.bufIfft, **input.bufNoiseLevels, {region});
+        input.cmdBuf->copyBuffer(*input.bufIfft, **input.bufFft, {region});
 
         barrier = {
             .srcAccessMask = vk::AccessFlagBits::eTransferWrite | vk::AccessFlagBits::eTransferRead,
@@ -130,6 +130,26 @@ void IQM::FSIMFilterCombinations::combineFilters(const FSIMInput &input, const u
             doPower = false;
         }
     }
+
+    // copy the summed values into expected position
+    vk::BufferCopy region {
+        .srcOffset = 0,
+        .dstOffset = partitions.noiseLevels,
+        .size = FSIM_ORIENTATIONS * sizeof(float),
+    };
+    input.cmdBuf->copyBuffer(*input.bufFft, **input.bufFft, {region});
+    barrier = {
+        .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+    };
+    input.cmdBuf->pipelineBarrier(
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::DependencyFlagBits::eDeviceGroup,
+        {barrier},
+        {},
+        {}
+    );
 }
 
 void IQM::FSIMFilterCombinations::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height) {
@@ -137,10 +157,11 @@ void IQM::FSIMFilterCombinations::setUpDescriptors(const FSIMInput &input, const
     uint64_t outFftBufSize = width * height * sizeof(float) * 2 * FSIM_SCALES * FSIM_ORIENTATIONS * 3;
 
     // oversize, so parallel sum can be done directly there
-    uint64_t noiseLevelsBufferSize = (FSIM_ORIENTATIONS + (width * height * 2 * 2)) * sizeof(float);
+    // still smaller than fftBuffer
+    uint64_t noiseLevelsBufferSize = (FSIM_ORIENTATIONS + (width * height * 2)) * sizeof(float);
 
-    auto angularInfos = VulkanRuntime::createImageInfos(std::vector(std::begin(input.ivAngular), std::end(input.ivAngular)));
-    auto logInfos = VulkanRuntime::createImageInfos(std::vector(std::begin(input.ivScales), std::end(input.ivScales)));
+    auto angularInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[5], input.ivFinalSums[0], input.ivFinalSums[1], input.ivFinalSums[2]});
+    auto logInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3], input.ivTempFloat[4]});
 
     const auto writeSetAngular = VulkanRuntime::createWriteSet(
         this->multPackDescSet,
@@ -182,9 +203,10 @@ void IQM::FSIMFilterCombinations::setUpDescriptors(const FSIMInput &input, const
         bufferInfo
     );
 
+    // can be reused at this moment
     auto bufferInfoSum = std::vector{
         vk::DescriptorBufferInfo{
-            .buffer = **input.bufNoiseLevels,
+            .buffer = **input.bufFft,
             .offset = 0,
             .range = noiseLevelsBufferSize,
         }

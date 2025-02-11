@@ -12,7 +12,7 @@ namespace IQM {
     struct FSIMInput;
 
     class FSIMLogGabor {
-    public:
+        friend class FSIM;
         explicit FSIMLogGabor(const vk::raii::Device &device, const vk::raii::DescriptorPool& descPool);
         void setUpDescriptors(const FSIMInput& input) const;
         void constructFilter(const FSIMInput &input, int width, int height);
