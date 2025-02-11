@@ -45,6 +45,10 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::Bin::VulkanResource::cr
         .memoryTypeIndex = memType
     };
 
+    if (memoryFlags & vk::MemoryPropertyFlagBits::eDeviceLocal) {
+        allocateSum += memReqs.size;
+    }
+
     memory = vk::raii::DeviceMemory{device, memoryAllocateInfo};
 
     return std::make_pair(std::move(buffer), std::move(memory));
@@ -69,6 +73,8 @@ IQM::Bin::VulkanImage IQM::Bin::VulkanResource::createImage(
         .allocationSize = memReqs.size,
         .memoryTypeIndex = memType
     };
+
+    allocateSum += memReqs.size;
 
     memory = vk::raii::DeviceMemory{device, memoryAllocateInfo};
     image.bindMemory(memory, 0);

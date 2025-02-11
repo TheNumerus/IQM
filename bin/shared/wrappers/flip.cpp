@@ -140,6 +140,7 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
 }
 
 void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::FLIP &flip, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
+    VulkanResource::resetMemCounter();
     FLIPArguments flipArgs;
     if (args.options.contains("--flip-width")) {
         flipArgs.monitor_width = std::stof(args.options.at("--flip-width"));
@@ -237,9 +238,12 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
         timestamps.mark("output saved");
 
         const auto end = std::chrono::high_resolution_clock::now();
-        std::cout << args.inputPath << ": " << result.meanFlip << std::endl;
         if (args.verbose) {
+            std::cout << args.inputPath << ": " << result.meanFlip << std::endl;
             timestamps.print(start, end);
+
+            double mbSize = static_cast<double>(VulkanResource::memCounter()) / 1024 / 1024;
+            std::cout << "VRAM used for resources: " << mbSize << " MB" << std::endl;
         }
     } catch (const std::exception& e) {
         std::cerr << "Failed to process '" << args.inputPath << "': " << e.what() << std::endl;

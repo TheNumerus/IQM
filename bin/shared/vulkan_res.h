@@ -32,8 +32,10 @@ namespace IQM::Bin {
             const vk::raii::PhysicalDevice &physicalDevice,
             const vk::ImageCreateInfo &imageInfo);
         static void initImages(const vk::raii::CommandBuffer &cmd_buf, const std::vector<std::shared_ptr<VulkanImage>> &images);
-
+        static void resetMemCounter() { allocateSum = 0; }
+        static unsigned long memCounter() { return allocateSum; }
     private:
+        inline static unsigned long allocateSum;
         static uint32_t findMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperties, uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask);
     };
 }

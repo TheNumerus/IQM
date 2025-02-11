@@ -204,6 +204,7 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
 
 void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::SSIM& ssim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
     try {
+        VulkanResource::resetMemCounter();
         Timestamps timestamps;
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -269,9 +270,13 @@ void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
         timestamps.mark("output saved");
 
         const auto end = std::chrono::high_resolution_clock::now();
-        std::cout << args.inputPath << ": " << result.mssim << std::endl;
+
         if (args.verbose) {
+            std::cout << args.inputPath << ": " << result.mssim << std::endl;
             timestamps.print(start, end);
+
+            double mbSize = static_cast<double>(VulkanResource::memCounter()) / 1024 / 1024;
+            std::cout << "VRAM used for resources: " << mbSize << " MB" << std::endl;
         }
     } catch (const std::exception& e) {
         std::cerr << "Failed to process '" << args.inputPath << "': " << e.what() << std::endl;
