@@ -9,6 +9,8 @@
 namespace IQM {
     std::string method_name(const Method &method) {
         switch (method) {
+            case Method::PSNR:
+                return "PSNR";
             case Method::SSIM:
                 return "SSIM";
             case Method::CW_SSIM_CPU:

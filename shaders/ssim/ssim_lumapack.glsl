@@ -13,7 +13,7 @@ layout(set = 0, binding = 1, r32f) uniform writeonly image2D output_img[5];
 
 // Rec. 601 - same as openCV
 float luminance(vec4 color) {
-    return 0.299 * color.r + 0.581 * color.g + 0.114 * color.b;
+    return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
 }
 
 void main() {

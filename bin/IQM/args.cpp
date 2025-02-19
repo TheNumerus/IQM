@@ -28,6 +28,8 @@ IQM::Bin::Args::Args(const unsigned argc, const char *argv[]) {
                 this->method = Method::FSIM;
             } else if (strcmp(argv[i + 1], "FLIP") == 0) {
                 this->method = Method::FLIP;
+            } else if (strcmp(argv[i + 1], "PSNR") == 0) {
+                this->method = Method::PSNR;
             } else {
                 throw std::runtime_error("Unknown method");
             }

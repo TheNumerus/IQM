@@ -30,6 +30,10 @@
 #include "../shared/wrappers/flip.h"
 #endif
 
+#if COMPILE_PSNR
+#include "../shared/wrappers/psnr.h"
+#endif
+
 /*
 void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
 #ifdef COMPILE_SVD
@@ -70,6 +74,8 @@ void printHelp() {
     << "    -v, --verbose     : enables more detailed output\n"
     << "    -h, --help        : prints help\n\n"
     << "Method specific arguments:\n"
+    << "PSNR:\n"
+    << "    --psnr-variant <VAR> : One of `rgb`, `luma` or `yuv`\n"
     << "FLIP:\n"
     << "    --flip-width <WIDTH>       : Width of display in meters\n"
     << "    --flip-res <RES>           : Resolution of display in pixels\n"
@@ -138,6 +144,13 @@ int main(const int argc, const char **argv) {
                 throw std::runtime_error("FLIP support is not compiled");
 #endif
                 break;
+            case IQM::Method::PSNR:
+#ifdef COMPILE_PSNR
+                psnr_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("PSNR support is not compiled");
+#endif
+            break;
         }
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

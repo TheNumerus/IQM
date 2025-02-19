@@ -32,6 +32,10 @@
 #include "../shared/wrappers/flip.h"
 #endif
 
+#if COMPILE_PSNR
+#include "../shared/wrappers/psnr.h"
+#endif
+
 void ErrorCallback(int, const char* err_str) {
     std::cout << "GLFW Error: " << err_str << std::endl;
 }
@@ -110,6 +114,9 @@ int main(int argc, const char **argv) {
 #ifdef COMPILE_FLIP
         IQM::FLIP flip(*instance.device());
 #endif
+#ifdef COMPILE_PSNR
+        IQM::PSNR psnr(*instance.device());
+#endif
 
         std::vector<std::chrono::microseconds> times;
 
@@ -148,6 +155,13 @@ int main(int argc, const char **argv) {
                         IQM::Bin::flip_run_single(args.value(), instance, flip, input, reference);
 #else
                         throw std::runtime_error("FLIP support is not compiled");
+#endif
+                    break;
+                    case IQM::Method::PSNR:
+#ifdef COMPILE_PSNR
+                        IQM::Bin::psnr_run_single(args.value(), instance, psnr, input, reference);
+#else
+                        throw std::runtime_error("PSNR support is not compiled");
 #endif
                     break;
                 }

@@ -24,6 +24,8 @@ IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]
 - `-h, --help` : prints help
 
 ### Method specific arguments:
+#### PSNR:
+- `--psnr-variant <VAR>` : One of `rgb`, `luma` or `yuv`
 #### FLIP:
 - `--flip-width <WIDTH>` : Width of display in meters
 - `--flip-res <RES>` : Resolution of display in pixels
@@ -33,6 +35,7 @@ IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]
 TODO
 
 ## Implemented methods
+### PSNR
 ### SSIM
 ### M-SVD
 ### FSIM
