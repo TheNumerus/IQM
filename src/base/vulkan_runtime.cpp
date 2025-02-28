@@ -6,8 +6,6 @@
 #include <IQM/base/vulkan_runtime.h>
 
 #include <fstream>
-#include <iostream>
-#include <stdexcept>
 #include <vector>
 
 vk::raii::ShaderModule IQM::GPU::VulkanRuntime::createShaderModule(const vk::raii::Device &device, const std::vector<uint32_t> &spvCode) {
@@ -187,4 +185,3 @@ vk::WriteDescriptorSet IQM::GPU::VulkanRuntime::createWriteSet(const vk::Descrip
 
     return writeSet;
 }
-

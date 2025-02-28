@@ -67,10 +67,6 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .initialLayout = vk::ImageLayout::eUndefined,
     };
 
-    vk::ImageCreateInfo lumaImageInfo {srcImageInfo};
-    lumaImageInfo.format = vk::Format::eR32G32Sfloat;
-    lumaImageInfo.usage = vk::ImageUsageFlagBits::eStorage;
-
     vk::ImageCreateInfo intermediateImageInfo = {srcImageInfo};
     intermediateImageInfo.usage = vk::ImageUsageFlagBits::eStorage;
     intermediateImageInfo.format = vk::Format::eR32Sfloat;

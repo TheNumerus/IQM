@@ -298,7 +298,7 @@ void IQM::SSIM::initDescriptors(const SSIMInput &input) {
         imageInfosIntermediate
     );
 
-    auto writeSetSssimOut = VulkanRuntime::createWriteSet(
+    auto writeSetSsimOut = VulkanRuntime::createWriteSet(
         this->descSetSsim,
         1,
         outImageInfos
@@ -311,5 +311,5 @@ void IQM::SSIM::initDescriptors(const SSIMInput &input) {
         bufInfos
     );
 
-    input.device->updateDescriptorSets({writeSetLumapackIn, writeSetLumapackOut, writeSetGaussFlip, writeSetGaussFlop, writeSetSsimIn, writeSetSssimOut, writeSetSum}, nullptr);
+    input.device->updateDescriptorSets({writeSetLumapackIn, writeSetLumapackOut, writeSetGaussFlip, writeSetGaussFlop, writeSetSsimIn, writeSetSsimOut, writeSetSum}, nullptr);
 }

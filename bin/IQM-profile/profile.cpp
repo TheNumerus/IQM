@@ -21,7 +21,7 @@
 #endif
 
 #if COMPILE_SVD
-#include <IQM/svd.h>
+#include "../shared/wrappers/svd.h"
 #endif
 
 #if COMPILE_FSIM
@@ -108,6 +108,9 @@ int main(int argc, const char **argv) {
 #ifdef COMPILE_SSIM
         IQM::SSIM ssim(*instance.device());
 #endif
+#ifdef COMPILE_SVD
+        IQM::SVD svd(*instance.device());
+#endif
 #ifdef COMPILE_FSIM
         IQM::FSIM fsim(*instance.device());
 #endif
@@ -138,7 +141,7 @@ int main(int argc, const char **argv) {
                         throw std::runtime_error("CW-SSIM is not implemented");
                     case IQM::Method::SVD:
 #ifdef COMPILE_SVD
-                        IQM::Bin::svd_run(args.value(), instance, matches, input, reference);
+                        IQM::Bin::svd_run_single(args.value(), instance, svd, input, reference);
 #else
                         throw std::runtime_error("M-SVD support is not compiled");
 #endif

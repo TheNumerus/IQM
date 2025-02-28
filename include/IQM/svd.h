@@ -6,36 +6,43 @@
 #ifndef SVD_H
 #define SVD_H
 
-#include <vector>
-#include <opencv2/core/mat.hpp>
-
-#include <IQM/input_image.h>
 #include <IQM/base/vulkan_runtime.h>
-#include <../../bin/shared/timestamps.h>
 
-namespace IQM::GPU {
-    struct SVDResult {
-        std::vector<float> imageData;
-        unsigned int width;
-        unsigned int height;
-        float msvd;
-        Timestamps timestamps;
+namespace IQM {
+    struct SVDInput {
+        const vk::raii::Device *device;
+        const vk::raii::CommandBuffer *cmdBuf;
+        const vk::raii::ImageView *ivTest, *ivRef, *ivConvTest, *ivConvRef;
+        const vk::raii::Buffer *bufSvd;
+        const vk::raii::Buffer *bufReduce;
+        const vk::raii::Buffer *bufSort;
+        const vk::raii::Buffer *bufSortTemp;
+        unsigned width, height;
     };
 
     class SVD {
     public:
         explicit SVD(const vk::raii::Device &device);
-        SVDResult computeMetric(const VulkanRuntime &runtime, const InputImage &image, const InputImage &ref);
+        void computeMetric(const SVDInput& input);
 
     private:
-        void prepareBuffers(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput, size_t histBufInput);
-        void reduceSingularValues(const VulkanRuntime &runtime, uint32_t valueCount);
-        void sortBlocks(const VulkanRuntime &runtime, uint32_t nValues, uint32_t nSortWorkgroups, uint32_t nBlocksPerWorkgroup, uint32_t sortGlobalInvocationSize);
-        void computeMsvd(const VulkanRuntime &runtime, uint32_t nValues);
-        void copyToGpu(const VulkanRuntime &runtime, size_t sizeInput, size_t sizeOutput, size_t histBufInput);
-        void copyFromGpu(const VulkanRuntime &runtime, size_t sizeOutput);
+        void convertColorSpace(const SVDInput& input);
+        void computeSvd(const SVDInput& input);
+        void reduceSingularValues(const SVDInput& input);
+        void sortBlocks(const SVDInput& input);
+        void computeMsvd(const SVDInput& input);
 
         vk::raii::DescriptorPool descPool = VK_NULL_HANDLE;
+
+        vk::raii::PipelineLayout layoutConvert = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineConvert = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutConvert = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetConvert = VK_NULL_HANDLE;
+
+        vk::raii::PipelineLayout layoutSvd = VK_NULL_HANDLE;
+        vk::raii::Pipeline pipelineSvd = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout descSetLayoutSvd = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetSvd = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout layoutReduce = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineReduce = VK_NULL_HANDLE;
@@ -57,23 +64,7 @@ namespace IQM::GPU {
         vk::raii::DescriptorSetLayout descSetLayoutSum = VK_NULL_HANDLE;
         vk::raii::DescriptorSet descSetSum = VK_NULL_HANDLE;
 
-        vk::raii::Buffer inputBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory inputMemory = VK_NULL_HANDLE;
-
-        vk::raii::Buffer outBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory outMemory = VK_NULL_HANDLE;
-
-        vk::raii::Buffer outSortBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory outSortMemory = VK_NULL_HANDLE;
-
-        vk::raii::Buffer outSortTempBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory outSortTempMemory = VK_NULL_HANDLE;
-
-        vk::raii::Buffer outSortHistBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory outSortHistMemory = VK_NULL_HANDLE;
-
-        vk::raii::Buffer stgBuffer = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory stgMemory = VK_NULL_HANDLE;
+        void initDescriptors(const SVDInput& input);
     };
 }
 

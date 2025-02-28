@@ -7,7 +7,7 @@ add_library(IQM::LibBase ALIAS IQM-LibBase)
 find_package(Vulkan REQUIRED)
 
 target_include_directories(IQM-LibBase
-        PUBLIC "../../../include"
+        PUBLIC "../../include"
 )
 
 target_link_libraries(IQM-LibBase PUBLIC Vulkan::Vulkan)

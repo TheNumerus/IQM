@@ -19,7 +19,7 @@
 #endif
 
 #if COMPILE_SVD
-#include <IQM/svd.h>
+#include "../shared/wrappers/svd.h"
 #endif
 
 #if COMPILE_FSIM

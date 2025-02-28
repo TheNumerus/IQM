@@ -1,6 +1,6 @@
-add_subdirectory(gpu/base)
+add_subdirectory(base)
 add_subdirectory(ssim)
-add_subdirectory(gpu/svd)
+add_subdirectory(svd)
 add_subdirectory(fsim)
 add_subdirectory(flip)
 add_subdirectory(psnr)
