@@ -33,13 +33,16 @@ namespace IQM::Bin {
         // R f32 output image
         std::shared_ptr<VulkanImage> imageOut;
 
+        // R u8 export image
+        std::shared_ptr<VulkanImage> imageExport;
+
         vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
         vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
         vk::raii::Fence transferFence = VK_NULL_HANDLE;
     };
 
     struct SSIMResult {
-        std::vector<float> imageData;
+        std::vector<unsigned char> imageData;
         float mssim;
     };
 

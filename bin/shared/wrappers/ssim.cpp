@@ -71,6 +71,10 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     intermediateImageInfo.usage = vk::ImageUsageFlagBits::eStorage;
     intermediateImageInfo.format = vk::Format::eR32Sfloat;
 
+    vk::ImageCreateInfo exitImageInfo = {srcImageInfo};
+    exitImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
+    exitImageInfo.format = vk::Format::eR8Unorm;
+
     vk::ImageCreateInfo dstImageInfo = {srcImageInfo};
     dstImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
     dstImageInfo.format = vk::Format::eR32Sfloat;
@@ -78,6 +82,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
     auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
     auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), dstImageInfo));
+    auto const imageExport = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), exitImageInfo));
     auto imagesBlurred = std::vector<std::shared_ptr<VulkanImage>>();
 
     for (int i = 0; i < 5; i++) {
@@ -95,6 +100,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .imageRef = imageRef,
         .imagesBlurred = imagesBlurred,
         .imageOut = imageOut,
+        .imageExport = imageExport,
         .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
@@ -151,6 +157,21 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
 
             ssim.computeMetric(ssimArgs);
 
+            std::array offsets = {
+                vk::Offset3D{0, 0, 0},
+                vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+            };
+            // copy RGBA f32 to RGBA u8
+            std::vector region {
+                vk::ImageBlit {
+                    .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .srcOffsets = offsets,
+                    .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .dstOffsets = offsets,
+                }
+            };
+            instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+
             instance.cmdBuf()->end();
 
             const std::vector cmdBufs = {
@@ -178,7 +199,7 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
             finishRenderDoc();
 
             if (match.outPath.has_value()) {
-                save_float_image(args.outputPath.value(), result.imageData, input.width, input.height);
+                save_char_image(args.outputPath.value(), result.imageData, input.width, input.height);
             }
 
             timestamps.mark("output saved");
@@ -240,6 +261,21 @@ void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
 
         ssim.computeMetric(ssimArgs);
 
+        std::array offsets = {
+            vk::Offset3D{0, 0, 0},
+            vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+        };
+        // copy RGBA f32 to RGBA u8
+        std::vector region {
+            vk::ImageBlit {
+                .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                .srcOffsets = offsets,
+                .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                .dstOffsets = offsets,
+            }
+        };
+        instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+
         instance.cmdBuf()->end();
 
         const std::vector cmdBufs = {
@@ -292,6 +328,7 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
         res.imageInput,
         res.imageRef,
         res.imageOut,
+        res.imageExport,
     };
 
     imagesToInit.insert(imagesToInit.end(), res.imagesBlurred.begin(), res.imagesBlurred.end());
@@ -336,16 +373,16 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
-        .bufferRowLength = res.imageOut->width,
-        .bufferImageHeight = res.imageOut->height,
+        .bufferRowLength = res.imageExport->width,
+        .bufferImageHeight = res.imageExport->height,
         .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
         .imageOffset = vk::Offset3D{0, 0, 0},
-        .imageExtent = vk::Extent3D{res.imageOut->width, res.imageOut->height, 1}
+        .imageExtent = vk::Extent3D{res.imageExport->width, res.imageExport->height, 1}
     };
-    instance.cmdBufTransfer()->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    instance.cmdBufTransfer()->copyImageToBuffer(res.imageExport->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
-        .dstOffset = sizeof(float) * res.imageOut->width * res.imageOut->height,
+        .dstOffset = sizeof(float) * res.imageExport->width * res.imageExport->height,
         .size = sizeof(float),
     };
     instance.cmdBufTransfer()->copyBuffer(res.mssimBuf, res.stgInput, bufCopy);
@@ -373,10 +410,10 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
     timestamps.mark("end GPU work");
 
     const auto offset = kernelSize - 1;
-    std::vector<float> outputData(res.imageOut->height * res.imageOut->width);
-    void * outBufData = res.stgInputMemory.mapMemory(0, (res.imageOut->height * res.imageOut->width + 1) * sizeof(float), {});
-    memcpy(outputData.data(), outBufData, res.imageOut->height * res.imageOut->width * sizeof(float));
-    result.mssim = (static_cast<float*>(outBufData))[res.imageOut->height * res.imageOut->width] / (static_cast<float>(res.imageOut->width - offset) * static_cast<float>(res.imageOut->height - offset));
+    std::vector<unsigned char> outputData(res.imageExport->height * res.imageExport->width);
+    void * outBufData = res.stgInputMemory.mapMemory(0, (res.imageExport->height * res.imageExport->width + 1) * sizeof(float), {});
+    memcpy(outputData.data(), outBufData, res.imageExport->height * res.imageExport->width * sizeof(unsigned char));
+    result.mssim = (static_cast<float*>(outBufData))[res.imageExport->height * res.imageExport->width] / (static_cast<float>(res.imageExport->width - offset) * static_cast<float>(res.imageExport->height - offset));
 
     res.stgInputMemory.unmapMemory();
     timestamps.mark("end copy from GPU");

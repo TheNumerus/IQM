@@ -60,19 +60,17 @@ namespace IQM::Bin {
         return result;
     }
 
-    inline void save_float_image(const std::string &filename, const std::vector<float> &imageData, unsigned int width, unsigned int height) {
-        const auto converted = convertFloatToChar(imageData);
-
-        auto saveResult = stbi_write_png(filename.c_str(), width, height, 1, converted.data(), width * sizeof(unsigned char));
+    inline void save_char_image(const std::string &filename, const std::vector<unsigned char> &imageData, unsigned int width, unsigned int height) {
+        auto saveResult = stbi_write_png(filename.c_str(), width, height, 1, imageData.data(), width * sizeof(unsigned char));
         if (saveResult == 0) {
             throw std::runtime_error("Failed to save output image");
         }
     }
 
-    inline void save_float_color_image(const std::string &filename, const std::vector<float> &imageData, unsigned int width, unsigned int height) {
+    inline void save_float_image(const std::string &filename, const std::vector<float> &imageData, unsigned int width, unsigned int height) {
         const auto converted = convertFloatToChar(imageData);
 
-        auto saveResult = stbi_write_png(filename.c_str(), width, height, 4, converted.data(), 4 * width * sizeof(unsigned char));
+        auto saveResult = stbi_write_png(filename.c_str(), width, height, 1, converted.data(), width * sizeof(unsigned char));
         if (saveResult == 0) {
             throw std::runtime_error("Failed to save output image");
         }
