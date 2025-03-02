@@ -77,6 +77,13 @@ namespace IQM::Bin {
             throw std::runtime_error("Failed to save output image");
         }
     }
+
+    inline void save_color_image(const std::string &filename, const std::vector<unsigned char> &imageData, unsigned int width, unsigned int height) {
+        auto saveResult = stbi_write_png(filename.c_str(), width, height, 4, imageData.data(), 4 * width * sizeof(unsigned char));
+        if (saveResult == 0) {
+            throw std::runtime_error("Failed to save output image");
+        }
+    }
 }
 
 #endif //IQM_IO_H

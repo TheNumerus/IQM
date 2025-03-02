@@ -87,6 +87,21 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
 
             flip.computeMetric(flipInput);
 
+            std::array offsets = {
+                vk::Offset3D{0, 0, 0},
+                vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+            };
+            // copy RGBA f32 to RGBA u8
+            std::vector region {
+                vk::ImageBlit {
+                    .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .srcOffsets = offsets,
+                    .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .dstOffsets = offsets,
+                }
+            };
+            instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageInput->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+
             instance.cmdBuf()->end();
 
             const std::vector cmdBufs = {
@@ -114,7 +129,7 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
             finishRenderDoc();
 
             if (match.outPath.has_value()) {
-                save_float_color_image(args.outputPath.value(), result.imageData, input.width, input.height);
+                save_color_image(args.outputPath.value(), result.imageData, input.width, input.height);
             }
 
             timestamps.mark("output saved");
@@ -201,6 +216,21 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
         instance.cmdBuf()->begin(beginInfo);
 
         flip.computeMetric(flipInput);
+
+        std::array offsets = {
+            vk::Offset3D{0, 0, 0},
+            vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+        };
+        // copy RGBA f32 to RGBA u8
+        std::vector region {
+            vk::ImageBlit {
+                .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                .srcOffsets = offsets,
+                .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                .dstOffsets = offsets,
+            }
+        };
+        instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageInput->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
 
         instance.cmdBuf()->end();
 
@@ -304,7 +334,7 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
         .arrayLayers = 1,
         .samples = vk::SampleCountFlagBits::e1,
         .tiling = vk::ImageTiling::eOptimal,
-        .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
+        .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
         .sharingMode = vk::SharingMode::eExclusive,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -442,16 +472,16 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
 
     vk::BufferImageCopy copyRegion{
         .bufferOffset = 0,
-        .bufferRowLength = (res.imageOut->width),
-        .bufferImageHeight = res.imageOut->height,
+        .bufferRowLength = (res.imageInput->width),
+        .bufferImageHeight = res.imageInput->height,
         .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
         .imageOffset = vk::Offset3D{0, 0, 0},
-        .imageExtent = vk::Extent3D{res.imageOut->width, res.imageOut->height, 1}
+        .imageExtent = vk::Extent3D{res.imageInput->width, res.imageInput->height, 1}
     };
-    instance.cmdBufTransfer()->copyImageToBuffer(res.imageOut->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    instance.cmdBufTransfer()->copyImageToBuffer(res.imageInput->image, vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
-        .dstOffset = sizeof(float) * (res.imageOut->width * res.imageOut->height * 4),
+        .dstOffset = sizeof(unsigned char) * (res.imageInput->width * res.imageInput->height * 4),
         .size = sizeof(float),
     };
     instance.cmdBufTransfer()->copyBuffer(res.meanBuf, res.stgInput, bufCopy);
@@ -478,9 +508,9 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
 
     timestamps.mark("end GPU work");
 
-    std::vector<float> outputData(res.imageOut->height * res.imageOut->width * 4);
+    std::vector<unsigned char> outputData(res.imageOut->height * res.imageOut->width * 4);
     void * outBufData = res.stgInputMemory.mapMemory(0, ((res.imageOut->height * res.imageOut->width * 4) + 1) * sizeof(float), {});
-    memcpy(outputData.data(), outBufData, res.imageOut->height * res.imageOut->width * 4 * sizeof(float));
+    memcpy(outputData.data(), outBufData, res.imageOut->height * res.imageOut->width * 4 * sizeof(unsigned char));
     result.meanFlip = (static_cast<float*>(outBufData))[res.imageOut->height * res.imageOut->width] / (static_cast<float>(res.imageOut->width) * static_cast<float>(res.imageOut->height));
 
     res.stgInputMemory.unmapMemory();

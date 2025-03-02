@@ -25,7 +25,7 @@ namespace IQM::Bin {
         vk::raii::Buffer meanBuf = VK_NULL_HANDLE;
         vk::raii::DeviceMemory meanMemory = VK_NULL_HANDLE;
 
-        // RGBA u8 input images
+        // RGBA u8 input/output images
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
 
@@ -51,7 +51,7 @@ namespace IQM::Bin {
     };
 
     struct FLIPResult {
-        std::vector<float> imageData;
+        std::vector<unsigned char> imageData;
         float meanFlip;
     };
 
