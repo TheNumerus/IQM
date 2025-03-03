@@ -22,27 +22,22 @@ namespace IQM::Bin {
         vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
         vk::raii::Buffer stgColormap = VK_NULL_HANDLE;
         vk::raii::DeviceMemory stgColormapMemory = VK_NULL_HANDLE;
-        vk::raii::Buffer meanBuf = VK_NULL_HANDLE;
-        vk::raii::DeviceMemory meanMemory = VK_NULL_HANDLE;
 
-        // RGBA u8 input/output images
+        // RGBA u8 input/export images
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
 
-        // 2x R f32 intermediate images
-        std::vector<std::shared_ptr<VulkanImage>> imagesFloatTemp;
+        // intermediate buffer
+        vk::raii::Buffer buf = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory memory = VK_NULL_HANDLE;
 
-        // 3x RGBA f32 intermediate images
-        std::vector<std::shared_ptr<VulkanImage>> imagesColorTemp;
-
-        // 2x RGBA f32 filters,
-        std::shared_ptr<VulkanImage> imageColorFilter;
+        // 1x RGBA f32 filters,
         std::shared_ptr<VulkanImage> imageFeatureFilter;
 
         // RGBA f32 colormap
         std::shared_ptr<VulkanImage> imageColorMap;
 
-        // RGBA f32 output image
+        // R f32 output image
         std::shared_ptr<VulkanImage> imageOut;
 
         vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;

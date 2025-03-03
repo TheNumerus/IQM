@@ -64,18 +64,9 @@ void IQM::Bin::flip_run(const Args& args, const VulkanInstance& instance, const 
                 .ivTest = &res.imageInput->imageView,
                 .ivRef = &res.imageRef->imageView,
                 .ivOut = &res.imageOut->imageView,
-                .ivColorMap = &res.imageColorMap->imageView,
-                .ivFeatErr = &res.imagesFloatTemp[0]->imageView,
-                .ivColorErr = &res.imagesFloatTemp[1]->imageView,
                 .ivFeatFilter = &res.imageFeatureFilter->imageView,
-                .ivColorFilter = &res.imageColorFilter->imageView,
-                .ivTemp = {
-                    &res.imagesColorTemp[0]->imageView,
-                    &res.imagesColorTemp[1]->imageView,
-                    &res.imagesColorTemp[2]->imageView,
-                },
                 .imgOut = &res.imageOut->image,
-                .bufMean = &res.meanBuf,
+                .buffer = &res.buf,
                 .width = input.width,
                 .height = input.height
             };
@@ -194,18 +185,9 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
             .ivTest = &res.imageInput->imageView,
             .ivRef = &res.imageRef->imageView,
             .ivOut = &res.imageOut->imageView,
-            .ivColorMap = &res.imageColorMap->imageView,
-            .ivFeatErr = &res.imagesFloatTemp[0]->imageView,
-            .ivColorErr = &res.imagesFloatTemp[1]->imageView,
             .ivFeatFilter = &res.imageFeatureFilter->imageView,
-            .ivColorFilter = &res.imageColorFilter->imageView,
-            .ivTemp = {
-                &res.imagesColorTemp[0]->imageView,
-                &res.imagesColorTemp[1]->imageView,
-                &res.imagesColorTemp[2]->imageView,
-            },
             .imgOut = &res.imageOut->image,
-            .bufMean = &res.meanBuf,
+            .buffer = &res.buf,
             .width = input.width,
             .height = input.height
         };
@@ -276,8 +258,9 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
 IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const InputImage &ref, const VulkanInstance &instance, unsigned spatialKernelSize, unsigned featureKernelSize) {
     // always 4 channels on input, with 1B per channel
     // add 1 float to end so buffer can be reused for writeback from GPU
-    const auto outSize = ((test.width * test.height * 4) + 1) * sizeof(float);
-    const auto size = (test.width * test.height ) * sizeof(float);
+    const auto outSize = ((test.width * test.height) + 1) * sizeof(float);
+    const auto size = (test.width * test.height) * sizeof(float);
+    const auto sizeIntermediate = (test.width * test.height) * sizeof(float) * 13;
     const auto colormapSize = 256 * 4 * sizeof(float);
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
         *instance.device(),
@@ -300,10 +283,10 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
-    auto [meanBuf, meanMem] = VulkanResource::createBuffer(
+    auto [buf, mem] = VulkanResource::createBuffer(
         *instance.device(),
         *instance.physicalDevice(),
-        size,
+        sizeIntermediate,
         vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal
     );
@@ -311,7 +294,7 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
     stgBuf.bindMemory(stgMem, 0);
     stgRefBuf.bindMemory(stgRefMem, 0);
     cmBuf.bindMemory(cmMem, 0);
-    meanBuf.bindMemory(meanMem, 0);
+    buf.bindMemory(mem, 0);
 
     void * inBufData = stgMem.mapMemory(0, size, {});
     memcpy(inBufData, test.data.data(), size);
@@ -342,12 +325,8 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
     };
 
     vk::ImageCreateInfo floatImageInfo = {srcImageInfo};
-    floatImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
+    floatImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
     floatImageInfo.format = vk::Format::eR32Sfloat;
-
-    vk::ImageCreateInfo colorImageInfo = {srcImageInfo};
-    colorImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
-    colorImageInfo.format = vk::Format::eR32G32B32A32Sfloat;
 
     vk::ImageCreateInfo spatialImageInfo = {srcImageInfo};
     spatialImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
@@ -366,20 +345,10 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
 
     auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
     auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
-    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo));
+    auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo));
     auto const imageColorFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), spatialImageInfo));
     auto const imageFeatureFilter = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), featureImageInfo));
     auto const imageColorMap = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorMapImageInfo));
-    auto imagesColorTemp = std::vector<std::shared_ptr<VulkanImage>>();
-    auto imagesFloatTemp = std::vector<std::shared_ptr<VulkanImage>>();
-
-    for (int i = 0; i < 3; i++) {
-        imagesColorTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorImageInfo)));
-    }
-
-    for (int i = 0; i < 2; i++) {
-        imagesFloatTemp.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo)));
-    }
 
     return FLIPResources{
         .stgInput = std::move(stgBuf),
@@ -388,13 +357,10 @@ IQM::Bin::FLIPResources IQM::Bin::flip_init_res(const InputImage &test, const In
         .stgRefMemory = std::move(stgRefMem),
         .stgColormap = std::move(cmBuf),
         .stgColormapMemory = std::move(cmMem),
-        .meanBuf = std::move(meanBuf),
-        .meanMemory = std::move(meanMem),
         .imageInput = imageInput,
         .imageRef = imageRef,
-        .imagesFloatTemp = imagesFloatTemp,
-        .imagesColorTemp = imagesColorTemp,
-        .imageColorFilter = imageColorFilter,
+        .buf = std::move(buf),
+        .memory = std::move(mem),
         .imageFeatureFilter = imageFeatureFilter,
         .imageColorMap = imageColorMap,
         .imageOut = imageOut,
@@ -414,14 +380,10 @@ void IQM::Bin::flip_upload(const VulkanInstance &instance, const FLIPResources &
         res.imageInput,
         res.imageRef,
         res.imageOut,
-        res.imageColorFilter,
         res.imageFeatureFilter,
         res.imageColorMap,
         res.imageOut,
     };
-
-    imagesToInit.insert(imagesToInit.end(), res.imagesColorTemp.begin(), res.imagesColorTemp.end());
-    imagesToInit.insert(imagesToInit.end(), res.imagesFloatTemp.begin(), res.imagesFloatTemp.end());
 
     VulkanResource::initImages(*instance.cmdBufTransfer(), imagesToInit);
 
@@ -484,7 +446,7 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
         .dstOffset = sizeof(unsigned char) * (res.imageInput->width * res.imageInput->height * 4),
         .size = sizeof(float),
     };
-    instance.cmdBufTransfer()->copyBuffer(res.meanBuf, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.buf, res.stgInput, bufCopy);
 
     instance.cmdBufTransfer()->end();
 
@@ -509,7 +471,7 @@ IQM::Bin::FLIPResult IQM::Bin::flip_copy_back(const VulkanInstance &instance, co
     timestamps.mark("end GPU work");
 
     std::vector<unsigned char> outputData(res.imageOut->height * res.imageOut->width * 4);
-    void * outBufData = res.stgInputMemory.mapMemory(0, ((res.imageOut->height * res.imageOut->width * 4) + 1) * sizeof(float), {});
+    void * outBufData = res.stgInputMemory.mapMemory(0, ((res.imageOut->height * res.imageOut->width ) + 1) * sizeof(float), {});
     memcpy(outputData.data(), outBufData, res.imageOut->height * res.imageOut->width * 4 * sizeof(unsigned char));
     result.meanFlip = (static_cast<float*>(outBufData))[res.imageOut->height * res.imageOut->width] / (static_cast<float>(res.imageOut->width) * static_cast<float>(res.imageOut->height));
 

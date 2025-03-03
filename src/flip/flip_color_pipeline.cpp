@@ -26,8 +26,8 @@ IQM::FLIPColorPipeline::FLIPColorPipeline(const vk::raii::Device &device, const 
     const auto smSpatialDetect = VulkanRuntime::createShaderModule(device, srcDetect);
 
     this->descSetLayout = VulkanRuntime::createDescLayout(device, {
-        {vk::DescriptorType::eStorageImage, 2},
-        {vk::DescriptorType::eStorageImage, 1},
+        {vk::DescriptorType::eStorageBuffer, 2},
+        {vk::DescriptorType::eStorageBuffer, 1},
     });
 
     const std::vector allDescLayouts = {
@@ -47,13 +47,13 @@ IQM::FLIPColorPipeline::FLIPColorPipeline(const vk::raii::Device &device, const 
     this->csfPrefilterDescSet = std::move(sets[1]);
     this->spatialDetectDescSet = std::move(sets[2]);
 
-    const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(float) + sizeof(uint32_t));
-
+    const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(float) + 4 * sizeof(uint32_t));
     this->csfPrefilterLayout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, ranges);
     this->csfPrefilterHorizontalPipeline = VulkanRuntime::createComputePipeline(device, smCsfPrefilterHorizontal, this->csfPrefilterLayout);
     this->csfPrefilterPipeline = VulkanRuntime::createComputePipeline(device, smCsfPrefilter, this->csfPrefilterLayout);
 
-    this->spatialDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, {});
+    const auto rangesDetect = VulkanRuntime::createPushConstantRange(sizeof(uint32_t));
+    this->spatialDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, rangesDetect);
     this->spatialDetectPipeline = VulkanRuntime::createComputePipeline(device, smSpatialDetect, this->spatialDetectLayout);
 }
 
@@ -62,11 +62,14 @@ void IQM::FLIPColorPipeline::prefilter(const FLIPInput& input, float pixels_per_
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->csfPrefilterLayout, 0, {this->csfPrefilterHorizontalDescSet}, {});
     input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
     input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 0u);
+    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 2 * sizeof(float), input.width * input.height);
+    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 3 * sizeof(float), input.width);
+    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 4 * sizeof(float), input.height);
 
     //shaders work in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
+    auto groups = VulkanRuntime::compute1DGroupCount(input.width * input.height, 1024);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
@@ -81,10 +84,10 @@ void IQM::FLIPColorPipeline::prefilter(const FLIPInput& input, float pixels_per_
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->csfPrefilterPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->csfPrefilterLayout, 0, {this->csfPrefilterDescSet}, {});
-    input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
-    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 0u);
+    //input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
+    //input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 0u);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
@@ -94,10 +97,10 @@ void IQM::FLIPColorPipeline::prefilter(const FLIPInput& input, float pixels_per_
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->csfPrefilterHorizontalPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->csfPrefilterLayout, 0, {this->csfPrefilterHorizontalDescSet}, {});
-    input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
+    //input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
     input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 1u);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
@@ -107,10 +110,10 @@ void IQM::FLIPColorPipeline::prefilter(const FLIPInput& input, float pixels_per_
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->csfPrefilterPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->csfPrefilterLayout, 0, {this->csfPrefilterDescSet}, {});
-    input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
-    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 1u);
+    //input.cmdBuf->pushConstants<float>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, pixels_per_degree);
+    //input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, sizeof(float), 1u);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 }
 
 void IQM::FLIPColorPipeline::computeErrorMap(const FLIPInput& input) {
@@ -127,66 +130,80 @@ void IQM::FLIPColorPipeline::computeErrorMap(const FLIPInput& input) {
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->spatialDetectPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->spatialDetectLayout, 0, {this->spatialDetectDescSet}, {});
+    input.cmdBuf->pushConstants<uint32_t>(this->csfPrefilterLayout, vk::ShaderStageFlagBits::eCompute, 0, input.width * input.height);
 
-    //shaders work in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
+    auto groups = VulkanRuntime::compute1DGroupCount(input.width * input.height, 1024);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 }
 
 void IQM::FLIPColorPipeline::setUpDescriptors(const FLIPInput& input) {
-    auto imageInfosPrefilterInput = VulkanRuntime::createImageInfos({
-        input.ivTemp[0],
-        input.ivTemp[1],
-    });
+    auto rgbRange = input.width * input.height * sizeof(float) * 3;
+    auto floatRange = input.width * input.height * sizeof(float);
 
-    auto imageInfosPrefilterOutput = VulkanRuntime::createImageInfos({
-        input.ivTemp[0],
-        input.ivTemp[1],
-    });
+    auto prefilterBufInfos = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = 0,
+            .range = rgbRange,
+        },
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange,
+            .range = rgbRange,
+        }
+    };
 
-    auto imageInfosPrefilterTemp = VulkanRuntime::createImageInfos({
-        input.ivTemp[2],
-    });
+    auto prefilterTempBufInfo = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = 2 * rgbRange,
+            .range = rgbRange,
+        },
+    };
 
-    auto imageInfosOutput = VulkanRuntime::createImageInfos({
-        input.ivColorErr,
-    });
+    auto bufInfoOutput = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = 2 * rgbRange,
+            .range = floatRange,
+        },
+    };
 
     auto writeSetPrefilterHorInput = VulkanRuntime::createWriteSet(
         this->csfPrefilterHorizontalDescSet,
         0,
-        imageInfosPrefilterInput
+        prefilterBufInfos
     );
 
     auto writeSetPrefilterHorOutput = VulkanRuntime::createWriteSet(
         this->csfPrefilterHorizontalDescSet,
         1,
-        imageInfosPrefilterTemp
+        prefilterTempBufInfo
     );
 
     auto writeSetPrefilterVertInput = VulkanRuntime::createWriteSet(
         this->csfPrefilterDescSet,
         1,
-        imageInfosPrefilterTemp
+        prefilterTempBufInfo
     );
 
     auto writeSetPrefilterVertOutput = VulkanRuntime::createWriteSet(
         this->csfPrefilterDescSet,
         0,
-        imageInfosPrefilterOutput
+        prefilterBufInfos
     );
 
     auto writeSetDetectInput = VulkanRuntime::createWriteSet(
         this->spatialDetectDescSet,
         0,
-        imageInfosPrefilterOutput
+        prefilterBufInfos
     );
 
     auto writeSetDetectOutput = VulkanRuntime::createWriteSet(
         this->spatialDetectDescSet,
         1,
-        imageInfosOutput
+        bufInfoOutput
     );
 
     input.device->updateDescriptorSets({writeSetPrefilterHorInput, writeSetPrefilterHorOutput, writeSetPrefilterVertInput, writeSetPrefilterVertOutput, writeSetDetectInput, writeSetDetectOutput}, nullptr);

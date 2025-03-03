@@ -63,38 +63,6 @@ uint32_t findMemoryType(vk::PhysicalDeviceMemoryProperties const &memoryProperti
     return typeIndex;
 }
 
-std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> IQM::GPU::VulkanRuntime::createBuffer(
-    const vk::raii::Device &device,
-    const vk::raii::PhysicalDevice &physicalDevice,
-    unsigned bufferSize,
-    vk::BufferUsageFlags bufferFlags,
-    vk::MemoryPropertyFlags memoryFlags) {
-    // create now, so it's destroyed before buffer
-    vk::raii::DeviceMemory memory{nullptr};
-
-    vk::BufferCreateInfo bufferCreateInfo{
-        .size = bufferSize,
-        .usage = bufferFlags,
-    };
-
-    vk::raii::Buffer buffer{device, bufferCreateInfo};
-    auto memReqs = buffer.getMemoryRequirements();
-    const auto memType = findMemoryType(
-        physicalDevice.getMemoryProperties(),
-        memReqs.memoryTypeBits,
-        memoryFlags
-    );
-
-    vk::MemoryAllocateInfo memoryAllocateInfo{
-        .allocationSize = memReqs.size,
-        .memoryTypeIndex = memType
-    };
-
-    memory = vk::raii::DeviceMemory{device, memoryAllocateInfo};
-
-    return std::make_pair(std::move(buffer), std::move(memory));
-}
-
 vk::raii::DescriptorPool IQM::GPU::VulkanRuntime::createDescPool(
     const vk::raii::Device &device,
     uint32_t maxSets,

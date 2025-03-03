@@ -30,6 +30,11 @@ static std::vector<uint32_t> srcErrCombine =
 #include <flip/combine_error_maps.inc>
 ;
 
+static std::vector<uint32_t> srcSum =
+#include <flip/sum.inc>
+;
+
+
 using IQM::GPU::VulkanRuntime;
 
 IQM::FLIP::FLIP(const vk::raii::Device &device):
@@ -45,10 +50,11 @@ colorPipeline(device, descPool)
     const auto smFeatureFilterHorizontal = VulkanRuntime::createShaderModule(device, srcFeatureFilterHorizontal);
     const auto smFeatureDetect = VulkanRuntime::createShaderModule(device, srcFeatureDetect);
     const auto smErrorCombine = VulkanRuntime::createShaderModule(device, srcErrCombine);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcSum);
 
     this->inputConvertDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageImage, 2},
-        {vk::DescriptorType::eStorageImage, 2},
+        {vk::DescriptorType::eStorageBuffer, 2},
     });
 
     this->featureFilterCreateDescSetLayout = VulkanRuntime::createDescLayout(device, {
@@ -56,23 +62,33 @@ colorPipeline(device, descPool)
     });
 
     this->featureFilterHorizontalDescSetLayout = VulkanRuntime::createDescLayout(device, {
-        {vk::DescriptorType::eStorageImage, 2},
-        {vk::DescriptorType::eStorageImage, 2},
+        {vk::DescriptorType::eStorageBuffer, 2},
+        {vk::DescriptorType::eStorageBuffer, 2},
+        {vk::DescriptorType::eStorageImage, 1},
+    });
+
+    this->featureDetectDescSetLayout = VulkanRuntime::createDescLayout(device, {
+        {vk::DescriptorType::eStorageBuffer, 2},
+        {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageImage, 1},
     });
 
     this->errorCombineDescSetLayout = VulkanRuntime::createDescLayout(device, {
-        {vk::DescriptorType::eStorageImage, 2},
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageImage, 1},
+        {vk::DescriptorType::eStorageBuffer, 2},
+        {vk::DescriptorType::eStorageBuffer, 1},
+    });
+
+    this->sumDescSetLayout = VulkanRuntime::createDescLayout(device, {
+        {vk::DescriptorType::eStorageBuffer, 1},
     });
 
     const std::vector allDescLayouts = {
         *this->inputConvertDescSetLayout,
         *this->featureFilterCreateDescSetLayout,
         *this->featureFilterHorizontalDescSetLayout,
+        *this->featureDetectDescSetLayout,
         *this->errorCombineDescSetLayout,
-        *this->errorCombineDescSetLayout,
+        *this->sumDescSetLayout,
     };
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
@@ -87,6 +103,7 @@ colorPipeline(device, descPool)
     this->featureFilterHorizontalDescSet = std::move(sets[2]);
     this->featureDetectDescSet = std::move(sets[3]);
     this->errorCombineDescSet = std::move(sets[4]);
+    this->sumDescSet = std::move(sets[5]);
 
     this->inputConvertLayout = VulkanRuntime::createPipelineLayout(device, {this->inputConvertDescSetLayout}, {});
     this->inputConvertPipeline = VulkanRuntime::createComputePipeline(device, smInputConvert, this->inputConvertLayout);
@@ -96,14 +113,18 @@ colorPipeline(device, descPool)
     this->featureFilterCreatePipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterCreate, this->featureFilterCreateLayout);
     this->featureFilterNormalizePipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterNormalize, this->featureFilterCreateLayout);
 
-    this->featureFilterHorizontalLayout = VulkanRuntime::createPipelineLayout(device, {this->featureFilterHorizontalDescSetLayout}, {});
+    const auto rangesHor = VulkanRuntime::createPushConstantRange(3 * sizeof(unsigned));
+    this->featureFilterHorizontalLayout = VulkanRuntime::createPipelineLayout(device, {this->featureFilterHorizontalDescSetLayout}, rangesHor);
     this->featureFilterHorizontalPipeline = VulkanRuntime::createComputePipeline(device, smFeatureFilterHorizontal, this->featureFilterHorizontalLayout);
 
-    this->featureDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->errorCombineDescSetLayout}, {});
+    this->featureDetectLayout = VulkanRuntime::createPipelineLayout(device, {this->featureDetectDescSetLayout}, rangesHor);
     this->featureDetectPipeline = VulkanRuntime::createComputePipeline(device, smFeatureDetect, this->featureDetectLayout);
 
-    this->errorCombineLayout = VulkanRuntime::createPipelineLayout(device, {this->errorCombineDescSetLayout}, {});
+    this->errorCombineLayout = VulkanRuntime::createPipelineLayout(device, {this->errorCombineDescSetLayout}, ranges);
     this->errorCombinePipeline = VulkanRuntime::createComputePipeline(device, smErrorCombine, this->errorCombineLayout);
+
+    this->sumLayout = VulkanRuntime::createPipelineLayout(device, {this->sumDescSetLayout}, ranges);
+    this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
 }
 
 void IQM::FLIP::computeMetric(const FLIPInput &input) {
@@ -117,6 +138,7 @@ void IQM::FLIP::computeMetric(const FLIPInput &input) {
     this->colorPipeline.prefilter(input, pixelsPerDegree);
     this->colorPipeline.computeErrorMap(input);
     this->computeFinalErrorMap(input);
+    this->computeMean(input);
 }
 
 float IQM::FLIP::pixelsPerDegree(const FLIPArguments &args) {
@@ -186,11 +208,13 @@ void IQM::FLIP::computeFeatureErrorMap(const FLIPInput& input) {
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->featureFilterHorizontalPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->featureFilterHorizontalLayout, 0, {this->featureFilterHorizontalDescSet}, {});
+    input.cmdBuf->pushConstants<uint32_t>(this->featureFilterHorizontalLayout, vk::ShaderStageFlagBits::eCompute, 0 * sizeof(float), input.width * input.height);
+    input.cmdBuf->pushConstants<uint32_t>(this->featureFilterHorizontalLayout, vk::ShaderStageFlagBits::eCompute, 1 * sizeof(float), input.width);
+    input.cmdBuf->pushConstants<uint32_t>(this->featureFilterHorizontalLayout, vk::ShaderStageFlagBits::eCompute, 2 * sizeof(float), input.height);
 
-    //shaders work in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
+    auto groups = VulkanRuntime::compute1DGroupCount(input.width * input.height, 1024);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 2);
+    input.cmdBuf->dispatch(groups, 1, 2);
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
@@ -200,8 +224,11 @@ void IQM::FLIP::computeFeatureErrorMap(const FLIPInput& input) {
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->featureDetectPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->featureDetectLayout, 0, {this->featureDetectDescSet}, {});
+    input.cmdBuf->pushConstants<uint32_t>(this->featureDetectLayout, vk::ShaderStageFlagBits::eCompute, 0 * sizeof(float), input.width * input.height);
+    input.cmdBuf->pushConstants<uint32_t>(this->featureDetectLayout, vk::ShaderStageFlagBits::eCompute, 1 * sizeof(float), input.width);
+    input.cmdBuf->pushConstants<uint32_t>(this->featureDetectLayout, vk::ShaderStageFlagBits::eCompute, 2 * sizeof(float), input.height);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
@@ -224,55 +251,149 @@ void IQM::FLIP::computeFinalErrorMap(const FLIPInput& input) {
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->errorCombinePipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->errorCombineLayout, 0, {this->errorCombineDescSet}, {});
+    input.cmdBuf->pushConstants<uint32_t>(this->errorCombineLayout, vk::ShaderStageFlagBits::eCompute, 0, input.width * input.height);
 
-    //shaders work in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
+    auto groups = VulkanRuntime::compute1DGroupCount(input.width * input.height, 1024);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groups, 1, 1);
+
+    memoryBarrier = {
+        .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+        .dstAccessMask = vk::AccessFlagBits::eTransferRead,
+    };
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eTransfer,
+        vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
+    );
+
+    vk::BufferImageCopy region = {
+        .bufferOffset = 0,
+        .bufferRowLength = input.width,
+        .bufferImageHeight = input.height,
+        .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+        .imageOffset = vk::Offset3D{0, 0, 0},
+        .imageExtent = vk::Extent3D{input.width, input.height, 1}
+    };
+    input.cmdBuf->copyBufferToImage(*input.buffer, *input.imgOut, vk::ImageLayout::eGeneral, {region});
+
+    memoryBarrier = {
+        .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+    };
+
+    input.cmdBuf->pipelineBarrier(
+        vk::PipelineStageFlagBits::eTransfer,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
     );
 }
 
+void IQM::FLIP::computeMean(const FLIPInput &input) {
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->sumPipeline);
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->sumLayout, 0, {this->sumDescSet}, {});
+
+    const auto sumSize = 1024;
+
+    uint32_t bufferSize = (input.width) * (input.height);
+    uint64_t groups = (bufferSize / sumSize) + 1;
+    uint32_t size = bufferSize;
+
+    for (;;) {
+        input.cmdBuf->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, 0, size);
+        input.cmdBuf->dispatch(groups, 1, 1);
+
+        vk::BufferMemoryBarrier barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+            .buffer = *input.buffer,
+            .offset = 0,
+            .size = bufferSize * sizeof(float),
+        };
+        input.cmdBuf->pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup,
+            {},
+            {barrier},
+            {}
+        );
+        if (groups == 1) {
+            break;
+        }
+        size = groups;
+        groups = (groups / sumSize) + 1;
+    }
+}
+
 void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
+    auto rgbRange = input.width * input.height * sizeof(float) * 3;
+    auto floatRange = input.width * input.height * sizeof(float);
+
     auto imageInfos = VulkanRuntime::createImageInfos({
         input.ivTest,
         input.ivRef,
     });
 
-    auto yccOutImageInfos = VulkanRuntime::createImageInfos({
-        input.ivTemp[0],
-        input.ivTemp[1],
-    });
+    auto yccOutBufInfos = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = 0,
+            .range = rgbRange,
+        },
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange,
+            .range = rgbRange,
+        }
+    };
 
     auto featureFilterImageInfos = VulkanRuntime::createImageInfos({
         input.ivFeatFilter,
     });
 
-    auto tempFeatureFilterImageInfos = VulkanRuntime::createImageInfos({
-        input.ivTemp[2],
-        input.ivOut,
-    });
+    auto tempFeatureFilterBufInfos = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange * 2,
+            .range = rgbRange,
+        },
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange * 3,
+            .range = rgbRange,
+        }
+    };
 
-    auto outFeatureImageInfos = VulkanRuntime::createImageInfos({
-        input.ivFeatErr,
-    });
+    auto outFeatureBufInfo = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange * 4,
+            .range = floatRange,
+        }
+    };
 
-    auto colorMapImageInfos = VulkanRuntime::createImageInfos({
-        input.ivColorMap
-    });
+    auto outBufInfo = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = 0,
+            .range = floatRange,
+        }
+    };
 
-    auto outImageInfos = VulkanRuntime::createImageInfos({
-        input.ivOut
-    });
-
-    auto errorImageInfos = VulkanRuntime::createImageInfos({
-        input.ivFeatErr,
-        input.ivColorErr,
-    });
+    auto errorBufInfos = std::vector {
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange * 4,
+            .range = floatRange,
+        },
+        vk::DescriptorBufferInfo {
+            .buffer = *input.buffer,
+            .offset = rgbRange * 2,
+            .range = floatRange,
+        }
+    };
 
     auto writeSetConvertInput = VulkanRuntime::createWriteSet(
         this->inputConvertDescSet,
@@ -283,7 +404,7 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
     auto writeSetConvertOutput = VulkanRuntime::createWriteSet(
         this->inputConvertDescSet,
         1,
-        yccOutImageInfos
+        yccOutBufInfos
     );
 
     auto writeSetFeatureFilter = VulkanRuntime::createWriteSet(
@@ -295,13 +416,13 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
     auto writeSetHorizontalInput = VulkanRuntime::createWriteSet(
         this->featureFilterHorizontalDescSet,
         0,
-        yccOutImageInfos
+        yccOutBufInfos
     );
 
     auto writeSetHorizontalOutput = VulkanRuntime::createWriteSet(
         this->featureFilterHorizontalDescSet,
         1,
-        tempFeatureFilterImageInfos
+        tempFeatureFilterBufInfos
     );
 
     auto writeSetHorizontalFilters = VulkanRuntime::createWriteSet(
@@ -313,13 +434,13 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
     auto writeSetDetectInput = VulkanRuntime::createWriteSet(
         this->featureDetectDescSet,
         0,
-        tempFeatureFilterImageInfos
+        tempFeatureFilterBufInfos
     );
 
     auto writeSetDetectOutput = VulkanRuntime::createWriteSet(
         this->featureDetectDescSet,
         1,
-        outFeatureImageInfos
+        outFeatureBufInfo
     );
 
     auto writeSetDetectFilters = VulkanRuntime::createWriteSet(
@@ -331,19 +452,19 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
     auto writeSetFinalIn = VulkanRuntime::createWriteSet(
         this->errorCombineDescSet,
         0,
-        errorImageInfos
-    );
-
-    auto writeSetFinalColorMap = VulkanRuntime::createWriteSet(
-        this->errorCombineDescSet,
-        1,
-        colorMapImageInfos
+        errorBufInfos
     );
 
     auto writeSetFinalOut = VulkanRuntime::createWriteSet(
         this->errorCombineDescSet,
-        2,
-        outImageInfos
+        1,
+        outBufInfo
+    );
+
+    auto writeSetSum = VulkanRuntime::createWriteSet(
+        this->sumDescSet,
+        0,
+        outBufInfo
     );
 
     input.device->updateDescriptorSets({
@@ -351,6 +472,7 @@ void IQM::FLIP::setUpDescriptors(const FLIPInput& input) {
         writeSetFeatureFilter,
         writeSetHorizontalInput, writeSetHorizontalFilters, writeSetHorizontalOutput,
         writeSetDetectInput, writeSetDetectFilters, writeSetDetectOutput,
-        writeSetFinalIn, writeSetFinalColorMap, writeSetFinalOut
+        writeSetFinalIn, writeSetFinalOut,
+        writeSetSum
     }, nullptr);
 }

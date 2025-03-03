@@ -23,12 +23,6 @@ namespace IQM::GPU {
             const vk::raii::Device &device,
             const vk::raii::ShaderModule &shader,
             const vk::raii::PipelineLayout &layout);
-        [[nodiscard]] static std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
-            const vk::raii::Device &device,
-            const vk::raii::PhysicalDevice &physicalDevice,
-            unsigned bufferSize,
-            vk::BufferUsageFlags bufferFlags,
-            vk::MemoryPropertyFlags memoryFlags);
         [[nodiscard]] static vk::raii::DescriptorPool createDescPool(
             const vk::raii::Device &device,
             uint32_t maxSets,
@@ -49,6 +43,15 @@ namespace IQM::GPU {
             }
 
             return std::make_pair(groupsX, groupsY);
+        }
+
+        static uint32_t compute1DGroupCount(const int size, const unsigned blockSize) {
+            auto groups = size / blockSize;
+            if (size % blockSize != 0) {
+                groups++;
+            }
+
+            return groups;
         }
 
         static vk::WriteDescriptorSet createWriteSet(const vk::DescriptorSet &descSet, uint32_t dstBinding, const std::vector<vk::DescriptorImageInfo> &imgInfos);
