@@ -19,6 +19,7 @@ namespace IQM {
         std::string refPath;
         std::unordered_map<std::string, std::string> options;
         std::optional<unsigned int> iterations;
+        bool colorize = false;
         bool verbose = false;
         bool printHelp = false;
     };

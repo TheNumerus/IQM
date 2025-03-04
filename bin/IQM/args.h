@@ -19,6 +19,7 @@ namespace IQM::Bin {
         std::string refPath;
         std::optional<std::string> outputPath;
         std::unordered_map<std::string, std::string> options;
+        bool colorize = false;
         bool verbose = false;
         bool printHelp = false;
     };

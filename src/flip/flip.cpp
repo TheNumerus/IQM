@@ -34,7 +34,6 @@ static std::vector<uint32_t> srcSum =
 #include <flip/sum.inc>
 ;
 
-
 using IQM::GPU::VulkanRuntime;
 
 IQM::FLIP::FLIP(const vk::raii::Device &device):

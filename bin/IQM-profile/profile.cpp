@@ -49,6 +49,7 @@ void printHelp() {
     << "    --ref <REF>          : path to reference image\n"
     << "    -i, --iterations <I> : number of iterations to compute, unlimited if not set\n"
     << "    -v, --verbose        : enables more detailed output\n"
+    << "    -c, --colorize       : colorize final output\n"
     << "    -h, --help           : prints help\n\n"
     << "Method specific arguments:\n"
     << "FLIP:\n"

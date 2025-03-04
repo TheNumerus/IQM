@@ -26,6 +26,8 @@ namespace IQM::Bin {
         // RGBA u8 input/export images
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
+        // optional image
+        std::shared_ptr<VulkanImage> imageGreyscaleOut;
 
         // intermediate buffer
         vk::raii::Buffer buf = VK_NULL_HANDLE;
@@ -53,9 +55,9 @@ namespace IQM::Bin {
     void flip_run(const IQM::Bin::Args& args, const IQM::VulkanInstance& instance, const std::vector<Match>& imageMatches);
     void flip_run_single(const IQM::ProfileArgs& args, const IQM::VulkanInstance& instance, IQM::FLIP& flip, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref);
 
-    FLIPResources flip_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance, unsigned spatialKernelSize, unsigned featureKernelSize);
+    FLIPResources flip_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance, bool colorize, unsigned featureKernelSize);
     void flip_upload(const IQM::VulkanInstance& instance, const FLIPResources& res);
-    FLIPResult flip_copy_back(const IQM::VulkanInstance& instance, const FLIPResources& res, Timestamps &timestamps);
+    FLIPResult flip_copy_back(const IQM::VulkanInstance& instance, const FLIPResources& res, Timestamps &timestamps, bool colorize);
 }
 
 #endif //IQM_BIN_FLIP_H

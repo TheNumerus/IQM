@@ -79,6 +79,10 @@ IQM::Bin::Args::Args(const unsigned argc, const char *argv[]) {
             this->printHelp = true;
             return;
         }
+        if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--colorize") == 0) {
+            this->colorize = true;
+            return;
+        }
 
         if (i + 1 >= argc) {
             throw std::runtime_error("Missing value argument");

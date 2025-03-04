@@ -34,35 +34,6 @@
 #include "../shared/wrappers/psnr.h"
 #endif
 
-/*
-void svd(const IQM::Args& args, const IQM::GPU::VulkanRuntime& vulkan, const InputImage input, const InputImage reference) {
-#ifdef COMPILE_SVD
-    IQM::GPU::SVD svd(vulkan._device);
-
-    // starts only in debug, needs to init after vulkan
-    initRenderDoc();
-
-    auto start = std::chrono::high_resolution_clock::now();
-    auto result = svd.computeMetric(vulkan, &input, &reference);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    // saves capture for debugging
-    finishRenderDoc();
-
-    std::cout << "M-SVD: " << result.msvd << std::endl;
-
-    if (args.verbose) {
-        result.timestamps.print(start, end);
-    }
-
-    if (args.outputPath.has_value()) {
-        IQM::save_float_image(args.outputPath.value(), result.imageData, result.width, result.height);
-    }
-#else
-    throw std::runtime_error("SVD support was not compiled");
-#endif
-}*/
-
 void printHelp() {
     std::cout << "IQM - Application for computing image quality metrics.\n"
     << "Usage: IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]\n\n"
@@ -72,6 +43,7 @@ void printHelp() {
     << "    --ref <REF>       : path to reference image\n"
     << "    --output <OUTPUT> : path to output image, optional\n\n"
     << "    -v, --verbose     : enables more detailed output\n"
+    << "    -c, --colorize    : colorize final output\n"
     << "    -h, --help        : prints help\n\n"
     << "Method specific arguments:\n"
     << "PSNR:\n"
