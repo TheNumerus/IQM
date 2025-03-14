@@ -9,7 +9,6 @@
 
 #include <IQM/base/vulkan_runtime.h>
 #include <IQM/fsim/log_gabor.h>
-#include <IQM/fsim/lowpass_filter.h>
 #include <IQM/fsim/angular_filter.h>
 #include <IQM/fsim/estimate_energy.h>
 #include <IQM/fsim/filter_combinations.h>
@@ -86,7 +85,6 @@ namespace IQM {
         vk::raii::DescriptorSetLayout descSetLayoutImageOp = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout descSetLayoutImBufOp = VK_NULL_HANDLE;
 
-        FSIMLowpassFilter lowpassFilter;
         FSIMLogGabor logGaborFilter;
         FSIMAngularFilter angularFilter;
         FSIMFilterCombinations combinations;

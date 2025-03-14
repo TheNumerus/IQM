@@ -1,5 +1,4 @@
 add_library(IQM-FSIM STATIC fsim.cpp
-        steps/lowpass_filter.cpp
         steps/log_gabor.cpp
         steps/angular_filter.cpp
         steps/filter_combinations.cpp

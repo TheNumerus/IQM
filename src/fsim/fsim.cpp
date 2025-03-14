@@ -26,7 +26,6 @@ descPool(VulkanRuntime::createDescPool(device, 64, {
     vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 128},
     vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 32}
 })),
-lowpassFilter(device, descPool),
 logGaborFilter(device, descPool),
 angularFilter(device, descPool),
 combinations(device, descPool),
@@ -104,24 +103,13 @@ void IQM::FSIM::computeMetric(const FSIMInput &input) {
     this->initDescriptors(input, partitions);
 
     this->computeDownscaledImages(input, F, widthDownscale, heightDownscale);
-    this->lowpassFilter.constructFilter(input, widthDownscale, heightDownscale);
+    this->logGaborFilter.constructFilter(input, widthDownscale, heightDownscale);
+    this->angularFilter.constructFilter(input, widthDownscale, heightDownscale);
 
     vk::MemoryBarrier barrier{
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
         .dstAccessMask = vk::AccessFlagBits::eShaderRead,
     };
-
-    input.cmdBuf->pipelineBarrier(
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::DependencyFlagBits::eDeviceGroup,
-        {barrier},
-        nullptr,
-        nullptr
-    );
-
-    this->logGaborFilter.constructFilter(input, widthDownscale, heightDownscale);
-    this->angularFilter.constructFilter(input, widthDownscale, heightDownscale);
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
@@ -264,7 +252,6 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input, const FftBufferPartition
     this->angularFilter.setUpDescriptors(input);
     this->estimateEnergy.setUpDescriptors(input, dWidth, dHeight);
     this->logGaborFilter.setUpDescriptors(input);
-    this->lowpassFilter.setUpDescriptors(input);
     this->sumFilterResponses.setUpDescriptors(input, dWidth, dHeight);
     this->final_multiply.setUpDescriptors(input, dWidth, dHeight);
     this->combinations.setUpDescriptors(input, dWidth, dHeight);
