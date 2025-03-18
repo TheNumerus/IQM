@@ -264,7 +264,7 @@ void IQM::FSIM::computeDownscaledImages(const FSIMInput &input, int factor, int 
     //shader works in 16x16 tiles
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 2);
+    input.cmdBuf->dispatch(width * height, 1, 2);
 }
 
 void IQM::FSIM::createGradientMap(const FSIMInput& input, int width, int height) {
