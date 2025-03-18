@@ -16,7 +16,6 @@ IQM::FSIMLogGabor::FSIMLogGabor(const vk::raii::Device &device, const vk::raii::
     const auto smLogGabor = VulkanRuntime::createShaderModule(device, src);
 
     this->descSetLayout = std::move(VulkanRuntime::createDescLayout(device, {
-        {vk::DescriptorType::eStorageImage, 1},
         {vk::DescriptorType::eStorageImage, FSIM_ORIENTATIONS},
     }));
 
@@ -37,23 +36,14 @@ IQM::FSIMLogGabor::FSIMLogGabor(const vk::raii::Device &device, const vk::raii::
 }
 
 void IQM::FSIMLogGabor::setUpDescriptors(const FSIMInput &input) const {
-    auto imageInfosLowpass = VulkanRuntime::createImageInfos({input.ivTempFloat[0]});
-    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3], input.ivTempFloat[4]});
-
-    const auto writeSetLowpass = VulkanRuntime::createWriteSet(
-        this->descSet,
-        0,
-        imageInfosLowpass
-    );
-
-    const auto writeSet = VulkanRuntime::createWriteSet(
-        this->descSet,
-        1,
-        imageInfos
-    );
+    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[0], input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3]});
 
     const std::vector writes = {
-        writeSetLowpass, writeSet,
+        VulkanRuntime::createWriteSet(
+            this->descSet,
+            0,
+            imageInfos
+        )
     };
 
     input.device->updateDescriptorSets(writes, nullptr);

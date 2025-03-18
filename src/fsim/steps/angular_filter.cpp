@@ -46,7 +46,7 @@ void IQM::FSIMAngularFilter::constructFilter(const FSIMInput &input, const unsig
 }
 
 void IQM::FSIMAngularFilter::setUpDescriptors(const FSIMInput &input) const {
-    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[5], input.ivFinalSums[0], input.ivFinalSums[1], input.ivFinalSums[2]});
+    auto imageInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[4], input.ivFinalSums[0], input.ivFinalSums[1], input.ivFinalSums[2]});
     const auto writeSet = VulkanRuntime::createWriteSet(
         this->descSet,
         0,

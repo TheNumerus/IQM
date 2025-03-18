@@ -28,7 +28,7 @@ namespace IQM {
      * ## Images with format RGBA u8 | D(WxH)
      * - *ivTestDown, *ivRefDown
      * ## Images with format R f32 | D(WxH)
-     * - *ivFinalSums[3], *ivTempFloat[6]
+     * - *ivFinalSums[3], *ivTempFloat[5]
      * ## Images with format RG f32 | D(WxH)
      * - *ivFilterResponsesTest[4]
      * - *ivFilterResponsesRef[4]
@@ -51,7 +51,7 @@ namespace IQM {
         const vk::raii::CommandBuffer *cmdBuf;
         const vk::raii::Fence *fenceFft, *fenceIfft;
         const vk::raii::ImageView *ivTest, *ivRef, *ivTestDown, *ivRefDown;
-        const vk::raii::ImageView *ivTempFloat[6];
+        const vk::raii::ImageView *ivTempFloat[5];
         const vk::raii::ImageView *ivFilterResponsesTest[FSIM_ORIENTATIONS];
         const vk::raii::ImageView *ivFilterResponsesRef[FSIM_ORIENTATIONS];
         const vk::raii::ImageView *ivFinalSums[3];
@@ -96,14 +96,12 @@ namespace IQM {
 
         vk::raii::PipelineLayout layoutDownscale = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineDownscale = VK_NULL_HANDLE;
-        vk::raii::DescriptorSet descSetDownscaleIn = VK_NULL_HANDLE;
-        vk::raii::DescriptorSet descSetDownscaleRef = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetDownscale = VK_NULL_HANDLE;
 
         // gradient map pass
         vk::raii::PipelineLayout layoutGradientMap = VK_NULL_HANDLE;
         vk::raii::Pipeline pipelineGradientMap = VK_NULL_HANDLE;
-        vk::raii::DescriptorSet descSetGradientMapIn = VK_NULL_HANDLE;
-        vk::raii::DescriptorSet descSetGradientMapRef = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet descSetGradientMap = VK_NULL_HANDLE;
 
         // extract luma for FFT library pass
         vk::raii::PipelineLayout layoutExtractLuma = VK_NULL_HANDLE;

@@ -25,7 +25,7 @@ namespace IQM::Bin {
         std::shared_ptr<VulkanImage> imageInput;
         std::shared_ptr<VulkanImage> imageRef;
 
-        // 9x R f32 intermediate images
+        // 8x R f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesFloat;
         // 8x RG f32 intermediate images
         std::vector<std::shared_ptr<VulkanImage>> imagesRg;

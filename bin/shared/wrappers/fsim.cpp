@@ -57,7 +57,6 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                     &res.imagesFloat[2]->imageView,
                     &res.imagesFloat[3]->imageView,
                     &res.imagesFloat[4]->imageView,
-                    &res.imagesFloat[5]->imageView,
                 },
                 .ivFilterResponsesTest = {
                     &res.imagesRg[0]->imageView,
@@ -72,14 +71,14 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                     &res.imagesRg[7]->imageView,
                 },
                 .ivFinalSums = {
+                    &res.imagesFloat[5]->imageView,
                     &res.imagesFloat[6]->imageView,
                     &res.imagesFloat[7]->imageView,
-                    &res.imagesFloat[8]->imageView,
                 },
                 .imgFinalSums = {
+                    &res.imagesFloat[5]->image,
                     &res.imagesFloat[6]->image,
                     &res.imagesFloat[7]->image,
-                    &res.imagesFloat[8]->image,
                 },
                 .bufFft = &res.bufFft,
                 .bufIfft = &res.bufIfft,
@@ -182,7 +181,6 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
                 &res.imagesFloat[2]->imageView,
                 &res.imagesFloat[3]->imageView,
                 &res.imagesFloat[4]->imageView,
-                &res.imagesFloat[5]->imageView,
             },
             .ivFilterResponsesTest = {
                 &res.imagesRg[0]->imageView,
@@ -197,14 +195,14 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
                 &res.imagesRg[7]->imageView,
             },
             .ivFinalSums = {
+                &res.imagesFloat[5]->imageView,
                 &res.imagesFloat[6]->imageView,
                 &res.imagesFloat[7]->imageView,
-                &res.imagesFloat[8]->imageView,
             },
             .imgFinalSums = {
+                &res.imagesFloat[5]->image,
                 &res.imagesFloat[6]->image,
                 &res.imagesFloat[7]->image,
-                &res.imagesFloat[8]->image,
             },
             .bufFft = &res.bufFft,
             .bufIfft = &res.bufIfft,
@@ -354,7 +352,7 @@ IQM::Bin::FSIMResources IQM::Bin::fsim_init_res(const InputImage &test, const In
     auto imagesRg = std::vector<std::shared_ptr<VulkanImage>>();
     auto imagesColor = std::vector<std::shared_ptr<VulkanImage>>();
 
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < 8; i++) {
         imagesFloat.emplace_back(std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), floatImageInfo)));
     }
 

@@ -40,8 +40,8 @@ final_multiply(device, descPool)
     const auto smExtractLuma = VulkanRuntime::createShaderModule(device, srcExtractLuma);
 
     this->descSetLayoutImageOp = VulkanRuntime::createDescLayout(device, {
-        {vk::DescriptorType::eStorageImage, 1},
-        {vk::DescriptorType::eStorageImage, 1},
+        {vk::DescriptorType::eStorageImage, 2},
+        {vk::DescriptorType::eStorageImage, 2},
     });
 
     this->descSetLayoutImBufOp = VulkanRuntime::createDescLayout(device, {
@@ -50,8 +50,6 @@ final_multiply(device, descPool)
     });
 
     const std::vector allLayouts = {
-        *this->descSetLayoutImageOp,
-        *this->descSetLayoutImageOp,
         *this->descSetLayoutImageOp,
         *this->descSetLayoutImageOp,
         *this->descSetLayoutImBufOp,
@@ -65,12 +63,10 @@ final_multiply(device, descPool)
     };
 
     auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
-    this->descSetDownscaleIn = std::move(sets[0]);
-    this->descSetDownscaleRef = std::move(sets[1]);
-    this->descSetGradientMapIn = std::move(sets[2]);
-    this->descSetGradientMapRef = std::move(sets[3]);
-    this->descSetExtractLumaIn = std::move(sets[4]);
-    this->descSetExtractLumaRef = std::move(sets[5]);
+    this->descSetDownscale = std::move(sets[0]);
+    this->descSetGradientMap = std::move(sets[1]);
+    this->descSetExtractLumaIn = std::move(sets[2]);
+    this->descSetExtractLumaRef = std::move(sets[3]);
 
     // 1x int - kernel size
     const auto downsampleRanges = VulkanRuntime::createPushConstantRange(sizeof(int));
@@ -158,46 +154,46 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input, const FftBufferPartition
 
     auto imageInfosInput = VulkanRuntime::createImageInfos({
         input.ivTest,
-        input.ivTestDown,
+        input.ivRef,
     });
 
-    auto imageInfosRef = VulkanRuntime::createImageInfos({
-        input.ivRef,
+    auto imageInfosOut = VulkanRuntime::createImageInfos({
+        input.ivTestDown,
         input.ivRefDown,
     });
 
     auto imageInfosGradIn = VulkanRuntime::createImageInfos({
         input.ivTestDown,
-        input.ivTempFloat[0],
+        input.ivRefDown,
     });
 
-    auto imageInfosGradRef = VulkanRuntime::createImageInfos({
-        input.ivRefDown,
+    auto imageInfosGradOut = VulkanRuntime::createImageInfos({
+        input.ivTempFloat[0],
         input.ivTempFloat[1],
     });
 
     auto writeSetInput = VulkanRuntime::createWriteSet(
-        this->descSetDownscaleIn,
+        this->descSetDownscale,
         0,
         imageInfosInput
     );
 
-    auto writeSetRef = VulkanRuntime::createWriteSet(
-        this->descSetDownscaleRef,
-        0,
-        imageInfosRef
+    auto writeSetOut = VulkanRuntime::createWriteSet(
+        this->descSetDownscale,
+        1,
+        imageInfosOut
     );
 
     auto writeSetGradIn = VulkanRuntime::createWriteSet(
-        this->descSetGradientMapIn,
+        this->descSetGradientMap,
         0,
         imageInfosGradIn
     );
 
-    auto writeSetGradRef = VulkanRuntime::createWriteSet(
-        this->descSetGradientMapRef,
-        0,
-        imageInfosGradRef
+    auto writeSetGradOut = VulkanRuntime::createWriteSet(
+        this->descSetGradientMap,
+        1,
+        imageInfosGradOut
     );
 
     // image size * 2 float components (complex numbers) * 2 batches
@@ -244,7 +240,7 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input, const FftBufferPartition
     );
 
     const std::vector writes = {
-        writeSetRef, writeSetInput, writeSetGradIn, writeSetGradRef, writeSetInImage, writeSetInBuf, writeSetRefImage, writeSetRefBuf
+        writeSetInput, writeSetOut, writeSetGradIn, writeSetGradOut, writeSetInImage, writeSetInBuf, writeSetRefImage, writeSetRefBuf
     };
 
     input.device->updateDescriptorSets(writes, nullptr);
@@ -261,31 +257,24 @@ void IQM::FSIM::initDescriptors(const FSIMInput &input, const FftBufferPartition
 
 void IQM::FSIM::computeDownscaledImages(const FSIMInput &input, int factor, int width, int height) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineDownscale);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutDownscale, 0, {this->descSetDownscaleIn}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutDownscale, 0, {this->descSetDownscale}, {});
 
     input.cmdBuf->pushConstants<int>(this->layoutDownscale, vk::ShaderStageFlagBits::eCompute, 0, factor);
 
-    //shader works in 8x8 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 8);
+    //shader works in 16x16 tiles
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutDownscale, 0, {this->descSetDownscaleRef}, {});
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groupsX, groupsY, 2);
 }
 
 void IQM::FSIM::createGradientMap(const FSIMInput& input, int width, int height) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineGradientMap);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGradientMap, 0, {this->descSetGradientMapIn}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGradientMap, 0, {this->descSetGradientMap}, {});
 
-    //shader works in 8x8 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 8);
+    //shader works in 16x16 tiles
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutGradientMap, 0, {this->descSetGradientMapRef}, {});
-
-    input.cmdBuf->dispatch(groupsX, groupsY, 1);
+    input.cmdBuf->dispatch(groupsX, groupsY, 2);
 }
 
 void IQM::FSIM::computeFft(const FSIMInput &input, const unsigned width, const unsigned height) {

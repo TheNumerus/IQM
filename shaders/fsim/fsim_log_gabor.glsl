@@ -10,8 +10,7 @@
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout(set = 0, binding = 0, r32f) uniform readonly image2D lowpass_filter;
-layout(set = 0, binding = 1, r32f) uniform writeonly image2D out_filter[SCALES];
+layout(set = 0, binding = 0, r32f) uniform writeonly image2D out_filter[SCALES];
 
 const float cutoff = 0.45;
 const float order = 15.0;
@@ -21,7 +20,7 @@ void main() {
     uint y = gl_WorkGroupID.y * gl_WorkGroupSize.y + gl_LocalInvocationID.y;
     uint z = gl_WorkGroupID.z;
     ivec2 pos = ivec2(x, y);
-    ivec2 size = imageSize(lowpass_filter);
+    ivec2 size = imageSize(out_filter[z]);
 
     if (x >= size.x || y >= size.y) {
         return;

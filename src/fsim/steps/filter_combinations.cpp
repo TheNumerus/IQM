@@ -160,8 +160,8 @@ void IQM::FSIMFilterCombinations::setUpDescriptors(const FSIMInput &input, const
     // still smaller than fftBuffer
     uint64_t noiseLevelsBufferSize = (FSIM_ORIENTATIONS + (width * height * 2)) * sizeof(float);
 
-    auto angularInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[5], input.ivFinalSums[0], input.ivFinalSums[1], input.ivFinalSums[2]});
-    auto logInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3], input.ivTempFloat[4]});
+    auto angularInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[4], input.ivFinalSums[0], input.ivFinalSums[1], input.ivFinalSums[2]});
+    auto logInfos = VulkanRuntime::createImageInfos({input.ivTempFloat[0], input.ivTempFloat[1], input.ivTempFloat[2], input.ivTempFloat[3]});
 
     const auto writeSetAngular = VulkanRuntime::createWriteSet(
         this->multPackDescSet,
