@@ -17,6 +17,8 @@ namespace IQM {
         const vk::raii::ImageView *ivOut;
         // Colormap image, expected in RGBA f32 format
         const vk::raii::ImageView *ivColormap;
+        // Should the colormap be inverted
+        bool invert = false;
         unsigned width, height;
     };
 

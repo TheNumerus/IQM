@@ -20,6 +20,8 @@ namespace IQM::Bin {
         vk::raii::DeviceMemory stgInputMemory = VK_NULL_HANDLE;
         vk::raii::Buffer stgRef = VK_NULL_HANDLE;
         vk::raii::DeviceMemory stgRefMemory = VK_NULL_HANDLE;
+        vk::raii::Buffer stgColormap = VK_NULL_HANDLE;
+        vk::raii::DeviceMemory stgColormapMemory = VK_NULL_HANDLE;
         vk::raii::Buffer mssimBuf = VK_NULL_HANDLE;
         vk::raii::DeviceMemory mssimMemory = VK_NULL_HANDLE;
 
@@ -36,6 +38,9 @@ namespace IQM::Bin {
         // R u8 export image
         std::shared_ptr<VulkanImage> imageExport;
 
+        // RGBA f32 colormap
+        std::shared_ptr<VulkanImage> imageColorMap;
+
         vk::raii::Semaphore uploadDone = VK_NULL_HANDLE;
         vk::raii::Semaphore computeDone = VK_NULL_HANDLE;
         vk::raii::Fence transferFence = VK_NULL_HANDLE;
@@ -51,7 +56,7 @@ namespace IQM::Bin {
 
     SSIMResources ssim_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance& instance);
     void ssim_upload(const IQM::VulkanInstance& instance, const SSIMResources& res);
-    SSIMResult ssim_copy_back(const IQM::VulkanInstance& instance, const SSIMResources& res, Timestamps &timestamps, uint32_t kernelSize);
+    SSIMResult ssim_copy_back(const IQM::VulkanInstance& instance, const SSIMResources& res, Timestamps &timestamps, uint32_t kernelSize, bool colorize);
 }
 
 #endif //IQM_BIN_SSIM_H

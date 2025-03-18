@@ -7,6 +7,8 @@
 #include "ssim.h"
 #include "../../shared/debug_utils.h"
 #include "../../shared/vulkan_res.h"
+#include "IQM/base/viridis.h"
+#include "IQM/base/colorize.h"
 
 using IQM::Bin::InputImage;
 using IQM::Bin::VulkanImage;
@@ -17,6 +19,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     // always 4 channels on input, with 1B per channel
     // add 1 float to end so buffer can be reused for writeback from GPU
     const auto size = (test.width * test.height + 1) * 4;
+    const auto colormapSize = 256 * 4 * sizeof(float);
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
         *instance.device(),
         *instance.physicalDevice(),
@@ -31,6 +34,13 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
     );
+    auto [cmBuf, cmMem] = VulkanResource::createBuffer(
+        *instance.device(),
+        *instance.physicalDevice(),
+        colormapSize,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+    );
     auto [mssimBuf, mssimMem] = VulkanResource::createBuffer(
         *instance.device(),
         *instance.physicalDevice(),
@@ -41,6 +51,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
 
     stgBuf.bindMemory(stgMem, 0);
     stgRefBuf.bindMemory(stgRefMem, 0);
+    cmBuf.bindMemory(cmMem, 0);
     mssimBuf.bindMemory(mssimMem, 0);
 
     void * inBufData = stgMem.mapMemory(0, size, {});
@@ -51,6 +62,10 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     memcpy(inBufData, ref.data.data(), size);
     stgRefMem.unmapMemory();
 
+    inBufData = cmMem.mapMemory(0, colormapSize, {});
+    memcpy(inBufData, viridis, colormapSize);
+    cmMem.unmapMemory();
+
     vk::ImageCreateInfo srcImageInfo = {
         .flags = {},
         .imageType = vk::ImageType::e2D,
@@ -60,7 +75,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .arrayLayers = 1,
         .samples = vk::SampleCountFlagBits::e1,
         .tiling = vk::ImageTiling::eOptimal,
-        .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst,
+        .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc,
         .sharingMode = vk::SharingMode::eExclusive,
         .queueFamilyIndexCount = 0,
         .pQueueFamilyIndices = nullptr,
@@ -79,10 +94,16 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
     dstImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc;
     dstImageInfo.format = vk::Format::eR32Sfloat;
 
+    vk::ImageCreateInfo colorMapImageInfo = {srcImageInfo};
+    colorMapImageInfo.usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferDst;
+    colorMapImageInfo.extent = vk::Extent3D(256, 1, 1);
+    colorMapImageInfo.format = vk::Format::eR32G32B32A32Sfloat;
+
     auto const imageInput = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
     auto const imageRef = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), srcImageInfo));
     auto const imageOut = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), dstImageInfo));
     auto const imageExport = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), exitImageInfo));
+    auto const imageColorMap = std::make_shared<VulkanImage>(VulkanResource::createImage(*instance.device(), *instance.physicalDevice(), colorMapImageInfo));
     auto imagesBlurred = std::vector<std::shared_ptr<VulkanImage>>();
 
     for (int i = 0; i < 5; i++) {
@@ -94,6 +115,8 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .stgInputMemory = std::move(stgMem),
         .stgRef = std::move(stgRefBuf),
         .stgRefMemory = std::move(stgRefMem),
+        .stgColormap = std::move(cmBuf),
+        .stgColormapMemory = std::move(cmMem),
         .mssimBuf = std::move(mssimBuf),
         .mssimMemory = std::move(mssimMem),
         .imageInput = imageInput,
@@ -101,6 +124,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
         .imagesBlurred = imagesBlurred,
         .imageOut = imageOut,
         .imageExport = imageExport,
+        .imageColorMap = imageColorMap,
         .uploadDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .computeDone = instance.device()->createSemaphore(vk::SemaphoreCreateInfo{}),
         .transferFence = instance.device()->createFence(vk::FenceCreateInfo{}),
@@ -109,6 +133,7 @@ IQM::Bin::SSIMResources IQM::Bin::ssim_init_res(const InputImage &test, const In
 
 void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const std::vector<Match>& imageMatches) {
     IQM::SSIM ssim(*instance.device());
+    IQM::Colorize colorizer(*instance.device());
 
     int processed = 0;
 
@@ -157,20 +182,35 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
 
             ssim.computeMetric(ssimArgs);
 
-            std::array offsets = {
-                vk::Offset3D{0, 0, 0},
-                vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
-            };
-            // copy RGBA f32 to RGBA u8
-            std::vector region {
-                vk::ImageBlit {
-                    .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
-                    .srcOffsets = offsets,
-                    .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
-                    .dstOffsets = offsets,
-                }
-            };
-            instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+            if (args.colorize) {
+                auto colorizerInput = IQM::ColorizeInput{
+                    .device = instance.device(),
+                    .cmdBuf = &*instance.cmdBuf(),
+                    .ivIn = &res.imageOut->imageView,
+                    .ivOut = &res.imageInput->imageView,
+                    .ivColormap = &res.imageColorMap->imageView,
+                    .invert = true,
+                    .width = input.width,
+                    .height = input.height
+                };
+
+                colorizer.compute(colorizerInput);
+            } else {
+                std::array offsets = {
+                    vk::Offset3D{0, 0, 0},
+                    vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+                };
+                // copy RGBA f32 to RGBA u8
+                std::vector region {
+                    vk::ImageBlit {
+                        .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                        .srcOffsets = offsets,
+                        .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                        .dstOffsets = offsets,
+                    }
+                };
+                instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+            }
 
             instance.cmdBuf()->end();
 
@@ -194,12 +234,16 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
             // wait so cmd buffer can be reused for GPU -> CPU transfer
             instance.waitForFence(res.transferFence);
 
-            auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize);
+            auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize, args.colorize);
 
             finishRenderDoc();
 
             if (match.outPath.has_value()) {
-                save_char_image(args.outputPath.value(), result.imageData, input.width, input.height);
+                if (args.colorize) {
+                    save_color_image(args.outputPath.value(), result.imageData, input.width, input.height);
+                } else {
+                    save_char_image(args.outputPath.value(), result.imageData, input.width, input.height);
+                }
             }
 
             timestamps.mark("output saved");
@@ -225,6 +269,7 @@ void IQM::Bin::ssim_run(const Args& args, const VulkanInstance& instance, const 
 void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanInstance &instance, IQM::SSIM& ssim, const IQM::Bin::InputImage& input, const IQM::Bin::InputImage& ref) {
     try {
         VulkanResource::resetMemCounter();
+        IQM::Colorize colorizer(*instance.device());
         Timestamps timestamps;
         auto start = std::chrono::high_resolution_clock::now();
 
@@ -261,20 +306,35 @@ void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
 
         ssim.computeMetric(ssimArgs);
 
-        std::array offsets = {
-            vk::Offset3D{0, 0, 0},
-            vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
-        };
-        // copy RGBA f32 to RGBA u8
-        std::vector region {
-            vk::ImageBlit {
-                .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
-                .srcOffsets = offsets,
-                .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
-                .dstOffsets = offsets,
-            }
-        };
-        instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+        if (args.colorize) {
+            auto colorizerInput = IQM::ColorizeInput{
+                .device = instance.device(),
+                .cmdBuf = &*instance.cmdBuf(),
+                .ivIn = &res.imageOut->imageView,
+                .ivOut = &res.imageInput->imageView,
+                .ivColormap = &res.imageColorMap->imageView,
+                .invert = true,
+                .width = input.width,
+                .height = input.height
+            };
+
+            colorizer.compute(colorizerInput);
+        } else {
+            std::array offsets = {
+                vk::Offset3D{0, 0, 0},
+                vk::Offset3D{static_cast<int>(res.imageInput->width), static_cast<int>(res.imageInput->height), 1}
+            };
+            // copy RGBA f32 to RGBA u8
+            std::vector region {
+                vk::ImageBlit {
+                    .srcSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .srcOffsets = offsets,
+                    .dstSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+                    .dstOffsets = offsets,
+                }
+            };
+            instance.cmdBuf()->blitImage(res.imageOut->image, vk::ImageLayout::eGeneral, res.imageExport->image, vk::ImageLayout::eGeneral, {region}, vk::Filter::eNearest);
+        }
 
         instance.cmdBuf()->end();
 
@@ -298,7 +358,7 @@ void IQM::Bin::ssim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
         // wait so cmd buffer can be reused for GPU -> CPU transfer
         instance.waitForFence(res.transferFence);
 
-        auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize);
+        auto result = ssim_copy_back(instance, res, timestamps, ssim.kernelSize, args.colorize);
 
         finishRenderDoc();
 
@@ -329,6 +389,7 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
         res.imageRef,
         res.imageOut,
         res.imageExport,
+        res.imageColorMap,
     };
 
     imagesToInit.insert(imagesToInit.end(), res.imagesBlurred.begin(), res.imagesBlurred.end());
@@ -343,9 +404,17 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageInput->width, res.imageInput->height, 1}
     };
+    vk::BufferImageCopy copyColorMapRegion{
+        .bufferOffset = 0,
+        .bufferRowLength = 256,
+        .bufferImageHeight = 1,
+        .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+        .imageOffset = vk::Offset3D{0, 0, 0},
+        .imageExtent = vk::Extent3D{256, 1, 1}
+    };
     instance.cmdBufTransfer()->copyBufferToImage(res.stgInput, res.imageInput->image,  vk::ImageLayout::eGeneral, copyRegion);
     instance.cmdBufTransfer()->copyBufferToImage(res.stgRef, res.imageRef->image,  vk::ImageLayout::eGeneral, copyRegion);
-
+    instance.cmdBufTransfer()->copyBufferToImage(res.stgColormap, res.imageColorMap->image,  vk::ImageLayout::eGeneral, copyColorMapRegion);
     instance.cmdBufTransfer()->end();
 
     const std::vector cmdBufsCopy = {
@@ -362,7 +431,7 @@ void IQM::Bin::ssim_upload(const VulkanInstance &instance, const SSIMResources &
     instance.queueTransfer()->submit(submitInfoCopy, res.transferFence);
 }
 
-IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, const SSIMResources &res, Timestamps &timestamps, uint32_t kernelSize) {
+IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, const SSIMResources &res, Timestamps &timestamps, const uint32_t kernelSize, const bool colorize) {
     SSIMResult result;
 
     // copy out
@@ -379,7 +448,13 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
         .imageOffset = vk::Offset3D{0, 0, 0},
         .imageExtent = vk::Extent3D{res.imageExport->width, res.imageExport->height, 1}
     };
-    instance.cmdBufTransfer()->copyImageToBuffer(res.imageExport->image,  vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+
+    if (colorize) {
+        instance.cmdBufTransfer()->copyImageToBuffer(res.imageInput->image, vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    } else {
+        instance.cmdBufTransfer()->copyImageToBuffer(res.imageExport->image, vk::ImageLayout::eGeneral, res.stgInput, copyRegion);
+    }
+
     vk::BufferCopy bufCopy{
         .srcOffset = 0,
         .dstOffset = sizeof(float) * res.imageExport->width * res.imageExport->height,
@@ -410,9 +485,9 @@ IQM::Bin::SSIMResult IQM::Bin::ssim_copy_back(const VulkanInstance &instance, co
     timestamps.mark("end GPU work");
 
     const auto offset = kernelSize - 1;
-    std::vector<unsigned char> outputData(res.imageExport->height * res.imageExport->width);
+    std::vector<unsigned char> outputData(res.imageExport->height * res.imageExport->width * 4);
     void * outBufData = res.stgInputMemory.mapMemory(0, (res.imageExport->height * res.imageExport->width + 1) * sizeof(float), {});
-    memcpy(outputData.data(), outBufData, res.imageExport->height * res.imageExport->width * sizeof(unsigned char));
+    memcpy(outputData.data(), outBufData, res.imageExport->height * res.imageExport->width * 4 * sizeof(unsigned char));
     result.mssim = (static_cast<float*>(outBufData))[res.imageExport->height * res.imageExport->width] / (static_cast<float>(res.imageExport->width - offset) * static_cast<float>(res.imageExport->height - offset));
 
     res.stgInputMemory.unmapMemory();

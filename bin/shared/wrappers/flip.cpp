@@ -7,7 +7,7 @@
 #include "flip.h"
 #include "../../shared/debug_utils.h"
 #include "../../shared/vulkan_res.h"
-#include "../../../include/IQM/base/viridis.h"
+#include "IQM/base/viridis.h"
 #include "IQM/base/colorize.h"
 
 using IQM::VulkanInstance;
@@ -226,7 +226,7 @@ void IQM::Bin::flip_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
                 .ivOut = &res.imageInput->imageView,
                 .ivColormap = &res.imageColorMap->imageView,
                 .width = input.width,
-                .height = input.height
+                .height = input.height,
             };
 
             colorizer.compute(colorizerInput);

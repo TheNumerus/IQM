@@ -12,6 +12,10 @@ layout(set = 0, binding = 0, r32f) uniform readonly image2D input_img;
 layout(set = 0, binding = 1, rgba8) uniform writeonly image2D output_img;
 layout(set = 0, binding = 2, rgba32f) uniform readonly image2D color_map;
 
+layout( push_constant ) uniform constants {
+    bool invert;
+} push_consts;
+
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
     uint y = gl_WorkGroupID.y * gl_WorkGroupSize.y + gl_LocalInvocationID.y;
@@ -23,6 +27,10 @@ void main() {
     }
 
     float value = imageLoad(input_img, pos).x;
+
+    if (push_consts.invert) {
+        value = 1.0 - value;
+    }
 
     int colorMax = imageSize(color_map).x - 1;
     vec4 color = imageLoad(color_map, ivec2(int(floor(value * colorMax)), 0));

@@ -36,7 +36,8 @@ descPool(VulkanRuntime::createDescPool(device, 4, {
     auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(sets[0]);
 
-    this->layout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, {});
+    const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(int));
+    this->layout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, ranges);
     this->pipeline = VulkanRuntime::createComputePipeline(device, sm, this->layout);
 }
 
@@ -69,6 +70,7 @@ void IQM::Colorize::compute(const ColorizeInput &input) {
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layout, 0, {this->descSet}, {});
+    input.cmdBuf->pushConstants<int>(this->layout, vk::ShaderStageFlagBits::eCompute, 0, input.invert);
 
     //shaders work in 16x16 tiles
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);

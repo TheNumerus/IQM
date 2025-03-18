@@ -1,12 +1,10 @@
 # Image Quality Metrics
-This library provides Vulkan implementations of SSIM, M-SVD, FSIM, FLIP
+This library provides Vulkan implementations of SSIM, FSIM, FLIP, PSNR
 image quality metrics.
 
 ## Prerequisites
 - C++ 20
 - Vulkan 1.2+
-- OpenCV (only for M-SVD)
-- tbb (Thread Building Blocks) (only for M-SVD)
 - VkFFT (only for FSIM)
 
 ## Binary Usage
@@ -16,11 +14,12 @@ IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]
 ```
 
 ### Arguments:
-- `--method <METHOD>` : selects method to compute, one of SSIM, SVD, FSIM, FLIP
+- `--method <METHOD>` : selects method to compute, one of SSIM, FSIM, FLIP, PSNR
 - `--input <INPUT>` : path to tested image
 - `--ref <REF>` : path to reference image
 - `--output <OUTPUT>` : path to output image, optional
 - `-v, --verbose` : enables more detailed output
+- `-c, --colorize `: colorize final output
 - `-h, --help` : prints help
 
 ### Method specific arguments:
@@ -37,6 +36,5 @@ TODO
 ## Implemented methods
 ### PSNR
 ### SSIM
-### M-SVD
 ### FSIM
 ### FLIP

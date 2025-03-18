@@ -38,7 +38,7 @@ void printHelp() {
     std::cout << "IQM - Application for computing image quality metrics.\n"
     << "Usage: IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]\n\n"
     << "Arguments:\n"
-    << "    --method <METHOD> : selects method to compute, one of SSIM, SVD, FSIM, FLIP\n"
+    << "    --method <METHOD> : selects method to compute, one of SSIM, FSIM, FLIP, PSNR\n"
     << "    --input <INPUT>   : path to tested image\n"
     << "    --ref <REF>       : path to reference image\n"
     << "    --output <OUTPUT> : path to output image, optional\n\n"
