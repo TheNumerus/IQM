@@ -23,6 +23,8 @@ namespace IQM {
      *
      * Buffer should have size of WxHx4 bytes.
      *
+     * If the image `imgOut` is not null, square errors will be saved there.
+     *
      * PSNR result is on the zero-th index of `bufSum`.
      */
     struct PSNRInput {
@@ -30,6 +32,7 @@ namespace IQM {
         const vk::raii::CommandBuffer *cmdBuf;
         const vk::raii::ImageView *ivTest, *ivRef;
         const vk::raii::Buffer *bufSum;
+        const vk::raii::Image *imgOut = nullptr;
         PSNRVariant variant;
         unsigned width, height;
     };

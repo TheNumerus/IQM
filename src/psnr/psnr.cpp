@@ -83,9 +83,22 @@ void IQM::PSNR::computeMetric(const PSNRInput &input) {
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
     );
+
+    if (input.imgOut != nullptr) {
+        auto region = vk::BufferImageCopy {
+            .bufferOffset = 0,
+            .bufferRowLength = input.width,
+            .bufferImageHeight = input.height,
+            .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+            .imageOffset = vk::Offset3D{0, 0, 0},
+            .imageExtent = vk::Extent3D{input.width, input.height, 1},
+        };
+
+        input.cmdBuf->copyBufferToImage(*input.bufSum, *input.imgOut, vk::ImageLayout::eGeneral, {region});
+    }
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSum);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layoutSum, 0, {this->descSetSum}, {});
