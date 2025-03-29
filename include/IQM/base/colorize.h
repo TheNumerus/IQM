@@ -19,6 +19,8 @@ namespace IQM {
         const vk::raii::ImageView *ivColormap;
         // Should the colormap be inverted
         bool invert = false;
+        // Scale to make small errors more visible
+        float scaler = 1.0f;
         unsigned width, height;
     };
 

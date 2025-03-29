@@ -36,7 +36,7 @@ descPool(VulkanRuntime::createDescPool(device, 4, {
     auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->descSet = std::move(sets[0]);
 
-    const auto ranges = VulkanRuntime::createPushConstantRange(sizeof(int));
+    const auto ranges = VulkanRuntime::createPushConstantRange(2 * sizeof(int));
     this->layout = VulkanRuntime::createPipelineLayout(device, {this->descSetLayout}, ranges);
     this->pipeline = VulkanRuntime::createComputePipeline(device, sm, this->layout);
 }
@@ -71,6 +71,7 @@ void IQM::Colorize::compute(const ColorizeInput &input) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->layout, 0, {this->descSet}, {});
     input.cmdBuf->pushConstants<int>(this->layout, vk::ShaderStageFlagBits::eCompute, 0, input.invert);
+    input.cmdBuf->pushConstants<float>(this->layout, vk::ShaderStageFlagBits::eCompute, sizeof(int), input.scaler);
 
     //shaders work in 16x16 tiles
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
@@ -79,12 +80,12 @@ void IQM::Colorize::compute(const ColorizeInput &input) {
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
-        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead,
     };
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
         vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
     );
 }

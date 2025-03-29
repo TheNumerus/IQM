@@ -14,6 +14,7 @@ layout(set = 0, binding = 2, rgba32f) uniform readonly image2D color_map;
 
 layout( push_constant ) uniform constants {
     bool invert;
+    float scaler;
 } push_consts;
 
 void main() {
@@ -26,12 +27,13 @@ void main() {
         return;
     }
 
-    float value = imageLoad(input_img, pos).x;
+    float value = clamp(imageLoad(input_img, pos).x, 0.0, 1.0);
 
     if (push_consts.invert) {
         value = 1.0 - value;
     }
 
+    value = pow(value, 1.0 / push_consts.scaler);
     int colorMax = imageSize(color_map).x - 1;
     vec4 color = imageLoad(color_map, ivec2(int(floor(value * colorMax)), 0));
 

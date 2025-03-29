@@ -196,6 +196,7 @@ void IQM::Bin::psnr_run(const Args& args, const VulkanInstance& instance, const 
                         .ivOut = &res.imageInput->imageView,
                         .ivColormap = &res.imageColorMap->imageView,
                         .invert = false,
+                        .scaler = 4.0,
                         .width = input.width,
                         .height = input.height
                     };
@@ -480,11 +481,11 @@ IQM::Bin::PSNRResult IQM::Bin::psnr_copy_back(const VulkanInstance &instance, co
     if (hasOutput) {
         if (colorize) {
             std::vector<unsigned char> data(res.imageInput->width * res.imageInput->height * 4);
-            memcpy(data.data(), outBufData, res.imageInput->height * res.imageInput->width * 4 * sizeof(unsigned char));
+            memcpy(data.data(), outBufData + sizeof(float), res.imageInput->height * res.imageInput->width * 4 * sizeof(unsigned char));
             result.imageData = std::move(data);
         } else {
             std::vector<unsigned char> data(res.imageInput->width * res.imageInput->height);
-            memcpy(data.data(), outBufData, res.imageInput->height * res.imageInput->width * sizeof(unsigned char));
+            memcpy(data.data(), outBufData + sizeof(float), res.imageInput->height * res.imageInput->width * sizeof(unsigned char));
             result.imageData = std::move(data);
         }
     }

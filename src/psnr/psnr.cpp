@@ -78,12 +78,12 @@ void IQM::PSNR::computeMetric(const PSNRInput &input) {
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
-        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+        .dstAccessMask = vk::AccessFlagBits::eTransferRead,
     };
 
     input.cmdBuf->pipelineBarrier(
         vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eTransfer,
         vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
     );
 
@@ -98,6 +98,17 @@ void IQM::PSNR::computeMetric(const PSNRInput &input) {
         };
 
         input.cmdBuf->copyBufferToImage(*input.bufSum, *input.imgOut, vk::ImageLayout::eGeneral, {region});
+
+        memoryBarrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferRead,
+            .dstAccessMask = vk::AccessFlagBits::eShaderWrite,
+        };
+
+        input.cmdBuf->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
+        );
     }
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->pipelineSum);
@@ -140,8 +151,13 @@ void IQM::PSNR::computeMetric(const PSNRInput &input) {
 
     input.cmdBuf->dispatch(1, 1, 1);
 
+    memoryBarrier = {
+        .srcAccessMask = vk::AccessFlagBits::eShaderWrite | vk::AccessFlagBits::eTransferWrite,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+    };
+
     input.cmdBuf->pipelineBarrier(
-        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
         vk::PipelineStageFlagBits::eComputeShader,
         vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
     );

@@ -81,7 +81,8 @@ IQM::ProfileArgs::ProfileArgs(const unsigned argc, const char *argv[]) {
         }
         if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--colorize") == 0) {
             this->colorize = true;
-            return;
+            i += 1;
+            continue;
         }
 
         if (i + 1 >= argc) {
