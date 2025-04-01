@@ -261,9 +261,6 @@ void IQM::FSIM::computeDownscaledImages(const FSIMInput &input, int factor, int 
 
     input.cmdBuf->pushConstants<int>(this->layoutDownscale, vk::ShaderStageFlagBits::eCompute, 0, factor);
 
-    //shader works in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(width, height, 16);
-
     input.cmdBuf->dispatch(width * height, 1, 2);
 }
 

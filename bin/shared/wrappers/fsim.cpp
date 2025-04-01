@@ -82,6 +82,8 @@ void IQM::Bin::fsim_run(const Args& args, const VulkanInstance& instance, const 
                 },
                 .bufFft = &res.bufFft,
                 .bufIfft = &res.bufIfft,
+                .fftApplication = nullptr,
+                .fftApplicationInverse = nullptr,
                 .width = input.width,
                 .height = input.height,
             };
@@ -163,7 +165,7 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
 
         fsim_upload(instance, res);
 
-        auto flipInput = IQM::FSIMInput {
+        auto fsimInput = IQM::FSIMInput {
             .device = instance.device(),
             .physicalDevice = instance.physicalDevice(),
             .queue = &*instance.queue(),
@@ -206,22 +208,24 @@ void IQM::Bin::fsim_run_single(const IQM::ProfileArgs &args, const IQM::VulkanIn
             },
             .bufFft = &res.bufFft,
             .bufIfft = &res.bufIfft,
+            .fftApplication = nullptr,
+            .fftApplicationInverse = nullptr,
             .width = input.width,
             .height = input.height,
         };
 
-        auto fftApplication = FftPlanner::initForward(flipInput, dWidth, dHeight);
-        auto fftApplicationInverse = FftPlanner::initInverse(flipInput, dWidth, dHeight);
+        auto fftApplication = FftPlanner::initForward(fsimInput, dWidth, dHeight);
+        auto fftApplicationInverse = FftPlanner::initInverse(fsimInput, dWidth, dHeight);
 
-        flipInput.fftApplication = &fftApplication;
-        flipInput.fftApplicationInverse = &fftApplicationInverse;
+        fsimInput.fftApplication = &fftApplication;
+        fsimInput.fftApplicationInverse = &fftApplicationInverse;
 
         const vk::CommandBufferBeginInfo beginInfo = {
             .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
         };
         instance.cmdBuf()->begin(beginInfo);
 
-        fsim.computeMetric(flipInput);
+        fsim.computeMetric(fsimInput);
 
         instance.cmdBuf()->end();
 

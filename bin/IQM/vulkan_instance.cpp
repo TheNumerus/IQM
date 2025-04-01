@@ -94,7 +94,7 @@ void IQM::Bin::VulkanInstance::initQueues() {
 
     // no dedicated transfer queue found
     bool dedicatedTransferQueue = true;
-    if (this->transferQueueFamilyIndex == -1) {
+    if (this->transferQueueFamilyIndex == static_cast<unsigned>(-1)) {
         dedicatedTransferQueue = false;
         this->transferQueueFamilyIndex = this->queueFamilyIndex;
 
@@ -165,7 +165,7 @@ std::vector<const char *> IQM::Bin::VulkanInstance::getLayers() {
     std::vector<VkLayerProperties> availableLayers(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-    for (const auto layer : availableLayers) {
+    for (const auto &layer : availableLayers) {
         if (strcmp(layer.layerName,  LAYER_VALIDATION.c_str()) == 0) {
             std::vector layers = {LAYER_VALIDATION.c_str()};
             return layers;

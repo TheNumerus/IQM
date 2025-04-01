@@ -2,13 +2,16 @@ add_executable(IQM IQM/main.cpp IQM/args.cpp IQM/file_matcher.cpp IQM/vulkan_ins
 add_executable(IQM::IQM ALIAS IQM)
 
 target_include_directories(IQM PUBLIC ../include)
-target_include_directories(IQM PUBLIC ../lib/stb)
+target_include_directories(IQM SYSTEM PUBLIC ../lib/stb)
 
 add_executable(IQM-profile IQM-profile/profile.cpp IQM-profile/args.cpp IQM-profile/vulkan_instance.cpp shared/methods.cpp shared/vulkan_res.cpp)
 add_executable(IQM::profile ALIAS IQM-profile)
 
 target_include_directories(IQM-profile PUBLIC ../include)
-target_include_directories(IQM-profile PUBLIC ../lib/stb)
+target_include_directories(IQM-profile SYSTEM PUBLIC ../lib/stb)
+
+target_compile_options(IQM PRIVATE "-Wall;-Wextra")
+target_compile_options(IQM-profile PRIVATE "-Wall;-Wextra")
 
 find_package(glfw3)
 target_link_libraries(IQM-profile glfw)

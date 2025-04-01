@@ -174,13 +174,6 @@ void IQM::FSIMNoisePower::computeNoisePower(const FSIMInput &input, const unsign
 }
 
 void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigned width, const unsigned height, const FftBufferPartitions& partitions) const {
-    uint32_t sortGlobalInvocationSize = (width * height) / 32;
-    uint32_t remainder = (width * height) % 32;
-    sortGlobalInvocationSize += remainder > 0 ? 1 : 0;
-
-    uint32_t nSortWorkgroups = (sortGlobalInvocationSize + 256 - 1) / 256;
-    auto histBufSize = nSortWorkgroups * 256 * sizeof(uint32_t);
-
     auto bufInfoIn = std::vector {
         vk::DescriptorBufferInfo {
             .buffer = *input.bufIfft,
@@ -234,85 +227,26 @@ void IQM::FSIMNoisePower::setUpDescriptors(const FSIMInput &input, const unsigne
 
     const auto writes = {
         // copy pass
-        VulkanRuntime::createWriteSet(this->descSet,
-            0,
-            bufInfoIn
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSet,
-            1,
-            bufInfoOut
-        ),
+        VulkanRuntime::createWriteSet(this->descSet, 0, bufInfoIn),
+        VulkanRuntime::createWriteSet(this->descSet, 1, bufInfoOut),
         // sort even
-        VulkanRuntime::createWriteSet(
-            this->descSetSortEven,
-            0,
-            bufInfoOut
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortEven,
-            1,
-            bufInfoSortTemp
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortEven,
-            2,
-            bufInfoSortHist
-        ),
+        VulkanRuntime::createWriteSet(this->descSetSortEven, 0, bufInfoOut),
+        VulkanRuntime::createWriteSet(this->descSetSortEven, 1, bufInfoSortTemp),
+        VulkanRuntime::createWriteSet(this->descSetSortEven,2, bufInfoSortHist),
         // sort odd
-        VulkanRuntime::createWriteSet(
-            this->descSetSortOdd,
-            0,
-            bufInfoSortTemp
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortOdd,
-            1,
-            bufInfoOut
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortOdd,
-            2,
-            bufInfoSortHist
-        ),
+        VulkanRuntime::createWriteSet(this->descSetSortOdd, 0, bufInfoSortTemp),
+        VulkanRuntime::createWriteSet(this->descSetSortOdd, 1, bufInfoOut),
+        VulkanRuntime::createWriteSet(this->descSetSortOdd, 2, bufInfoSortHist),
         // sort histogram even
-        VulkanRuntime::createWriteSet(
-            this->descSetSortHistogramEven,
-            0,
-            bufInfoOut
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortHistogramEven,
-            1,
-            bufInfoSortHist
-        ),
+        VulkanRuntime::createWriteSet(this->descSetSortHistogramEven, 0, bufInfoOut),
+        VulkanRuntime::createWriteSet(this->descSetSortHistogramEven, 1, bufInfoSortHist),
         // sort histogram odd
-        VulkanRuntime::createWriteSet(
-            this->descSetSortHistogramOdd,
-            0,
-            bufInfoSortTemp
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetSortHistogramOdd,
-            1,
-            bufInfoSortHist
-        ),
+        VulkanRuntime::createWriteSet(this->descSetSortHistogramOdd, 0, bufInfoSortTemp),
+        VulkanRuntime::createWriteSet(this->descSetSortHistogramOdd, 1, bufInfoSortHist),
         // noise power
-        VulkanRuntime::createWriteSet(
-            this->descSetNoisePower,
-            0,
-            bufInfoOut
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetNoisePower,
-            1,
-            bufInfoFilterSums
-        ),
-        VulkanRuntime::createWriteSet(
-            this->descSetNoisePower,
-            2,
-            bufInfoNoisePower
-        ),
+        VulkanRuntime::createWriteSet(this->descSetNoisePower, 0, bufInfoOut),
+        VulkanRuntime::createWriteSet(this->descSetNoisePower, 1, bufInfoFilterSums),
+        VulkanRuntime::createWriteSet(this->descSetNoisePower, 2, bufInfoNoisePower),
     };
 
     input.device->updateDescriptorSets(writes, nullptr);

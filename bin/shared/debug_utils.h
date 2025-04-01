@@ -20,7 +20,7 @@ inline void initRenderDoc() {
         pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)(dlsym(mod, "RENDERDOC_GetAPI"));
         int ret = RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void **>(&api));
         assert(ret == 1);
-        renderdocActive = true;
+        renderdocActive = ret == 1;
     }
 
     if (renderdocActive) {

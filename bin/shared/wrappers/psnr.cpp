@@ -475,7 +475,7 @@ IQM::Bin::PSNRResult IQM::Bin::psnr_copy_back(const VulkanInstance &instance, co
 
     timestamps.mark("end GPU work");
 
-    void * outBufData = res.stgInputMemory.mapMemory(0, sizeof(float) + res.imageInput->width * res.imageInput->height * 4, {});
+    const auto outBufData = static_cast<float *>(res.stgInputMemory.mapMemory(0, sizeof(float) + res.imageInput->width * res.imageInput->height * 4, {}));
     memcpy(&result.db, outBufData, sizeof(float));
 
     if (hasOutput) {

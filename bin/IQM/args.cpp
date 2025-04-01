@@ -12,7 +12,7 @@ IQM::Bin::Args::Args(const unsigned argc, const char *argv[]) {
     bool parsedInput = false;
     bool parsedReference = false;
 
-    int i = 1;
+    unsigned i = 1;
     while (i < argc)  {
         if (strcmp(argv[i], "--method") == 0) {
             if (i + 1 >= argc) {

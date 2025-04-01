@@ -32,7 +32,7 @@ namespace IQM::GPU {
             const std::vector<std::pair<vk::DescriptorType, uint32_t>> &stub);
         static std::vector<vk::PushConstantRange> createPushConstantRange(unsigned size);
         static std::vector<vk::DescriptorImageInfo> createImageInfos(const std::vector<const vk::raii::ImageView *> &images);
-        static std::pair<uint32_t, uint32_t> compute2DGroupCounts(const int width, const unsigned height, const unsigned tileSize) {
+        static std::pair<uint32_t, uint32_t> compute2DGroupCounts(const unsigned width, const unsigned height, const unsigned tileSize) {
             auto groupsX = width / tileSize;
             if (width % tileSize != 0) {
                 groupsX++;

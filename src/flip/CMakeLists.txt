@@ -11,4 +11,5 @@ target_include_directories(IQM-FLIP
         PRIVATE "../../shaders_out"
 )
 
+target_compile_options(IQM-FLIP PRIVATE "-Wall;-Wextra")
 target_link_libraries(IQM-FLIP PUBLIC Vulkan::Vulkan IQM::LibBase)

@@ -311,7 +311,7 @@ std::vector<const char *> IQM::Profile::VulkanInstance::getLayers() {
     std::vector<VkLayerProperties> availableLayers(layerCount);
     vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
-    for (const auto layer : availableLayers) {
+    for (const auto &layer : availableLayers) {
         if (strcmp(layer.layerName,  LAYER_VALIDATION.c_str()) == 0) {
             std::vector layers = {LAYER_VALIDATION.c_str()};
             return layers;
