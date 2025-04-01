@@ -21,6 +21,8 @@ namespace IQM {
                 return "FSIM";
             case Method::FLIP:
                 return "FLIP";
+            case Method::LPIPS:
+                return "LPIPS";
             default:
                 throw std::runtime_error("unknown method");
         }

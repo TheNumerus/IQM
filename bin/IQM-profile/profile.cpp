@@ -36,6 +36,10 @@
 #include "../shared/wrappers/psnr.h"
 #endif
 
+#if COMPILE_LPIPS
+#include "../shared/wrappers/lpips.h"
+#endif
+
 void ErrorCallback(int, const char* err_str) {
     std::cout << "GLFW Error: " << err_str << std::endl;
 }
@@ -121,6 +125,10 @@ int main(int argc, const char **argv) {
 #ifdef COMPILE_PSNR
         IQM::PSNR psnr(*instance.device());
 #endif
+#ifdef COMPILE_LPIPS
+        IQM::LPIPS lpips(*instance.device());
+        auto modelData = IQM::Bin::load_model("lpips.dat");
+#endif
 
         std::vector<std::chrono::microseconds> times;
 
@@ -166,6 +174,13 @@ int main(int argc, const char **argv) {
                         IQM::Bin::psnr_run_single(args.value(), instance, psnr, input, reference);
 #else
                         throw std::runtime_error("PSNR support is not compiled");
+#endif
+                    break;
+                    case IQM::Method::LPIPS:
+#ifdef COMPILE_LPIPS
+                        IQM::Bin::lpips_run_single(args.value(), instance, lpips, input, reference, modelData);
+#else
+                        throw std::runtime_error("LPIPS support is not compiled");
 #endif
                     break;
                 }

@@ -33,6 +33,7 @@ namespace IQM::Bin {
             const vk::ImageCreateInfo &imageInfo);
         static void initImages(const vk::raii::CommandBuffer &cmd_buf, const std::vector<std::shared_ptr<VulkanImage>> &images);
         static void resetMemCounter() { allocateSum = 0; }
+        static void addMemCounter(unsigned long mem) { allocateSum += mem; }
         static unsigned long memCounter() { return allocateSum; }
     private:
         inline static unsigned long allocateSum;

@@ -30,6 +30,8 @@ IQM::ProfileArgs::ProfileArgs(const unsigned argc, const char *argv[]) {
                 this->method = Method::FLIP;
             } else if (strcmp(argv[i + 1], "PSNR") == 0) {
                 this->method = Method::PSNR;
+            } else if (strcmp(argv[i + 1], "LPIPS") == 0) {
+                this->method = Method::LPIPS;
             } else {
                 throw std::runtime_error("Unknown method");
             }

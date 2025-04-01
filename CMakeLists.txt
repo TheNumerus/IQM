@@ -10,6 +10,7 @@ option(SVD "Compile SVD Metric" ON)
 option(FSIM "Compile FSIM Metric" ON)
 option(FLIP "Compile FLIP Metric" ON)
 option(PSNR "Compile PSNR Metric" ON)
+option(LPIPS "Compile LPIPS Metric" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVULKAN_HPP_NO_CONSTRUCTORS")

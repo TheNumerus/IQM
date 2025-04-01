@@ -14,6 +14,8 @@
 #include <string>
 #include <cstring>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
 
 namespace IQM::Bin {
     struct Match {
@@ -81,6 +83,26 @@ namespace IQM::Bin {
         if (saveResult == 0) {
             throw std::runtime_error("Failed to save output image");
         }
+    }
+
+    inline std::vector<float> load_model(const std::string &filename) {
+        std::string path = std::filesystem::canonical("/proc/self/exe");
+        path = path.substr(0, path.rfind('/') + 1);
+
+        std::ifstream input(path + filename, std::ios::binary);
+
+        if (input.bad()) {
+            throw std::runtime_error("Failed to open file '" + filename + "'");
+        }
+
+        input.seekg(0, std::ios::end);
+        const auto params = input.tellg() / sizeof(float);
+        input.seekg(0, std::ios::beg);
+
+        std::vector<float> buffer(params);
+        input.read(reinterpret_cast<char*>(&buffer[0]), params*sizeof(float));
+
+        return buffer;
     }
 }
 

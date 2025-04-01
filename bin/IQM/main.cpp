@@ -34,6 +34,10 @@
 #include "../shared/wrappers/psnr.h"
 #endif
 
+#if COMPILE_LPIPS
+#include "../shared/wrappers/lpips.h"
+#endif
+
 void printHelp() {
     std::cout << "IQM - Application for computing image quality metrics.\n"
     << "Usage: IQM --method METHOD --input INPUT --ref REF [--output OUTPUT]\n\n"
@@ -121,6 +125,13 @@ int main(const int argc, const char **argv) {
                 psnr_run(args.value(), vulkan, matches);
 #else
                 throw std::runtime_error("PSNR support is not compiled");
+#endif
+            break;
+            case IQM::Method::LPIPS:
+#ifdef COMPILE_LPIPS
+                lpips_run(args.value(), vulkan, matches);
+#else
+                throw std::runtime_error("LPIPS support is not compiled");
 #endif
             break;
         }
