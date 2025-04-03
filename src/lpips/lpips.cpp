@@ -106,7 +106,7 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
 
     const auto convRange = VulkanRuntime::createPushConstantRange(8 * sizeof(uint32_t));
     this->convLayout = VulkanRuntime::createPipelineLayout(device, {this->convDescSetLayout}, {convRange});
-    this->convPipeline = VulkanRuntime::createComputePipeline(device, smConv, this->convLayout);
+    this->createConvPipelines(device, smConv, this->convLayout);
 
     const auto maxPoolRange = VulkanRuntime::createPushConstantRange(4 * sizeof(uint32_t));
     this->maxPoolLayout = VulkanRuntime::createPipelineLayout(device, {this->maxPoolDescSetLayout}, {maxPoolRange});
@@ -120,6 +120,73 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     this->reconstructLayout = VulkanRuntime::createPipelineLayout(device, {this->reconstructDescSetLayout}, {reconstructRange});
     this->reconstructPipeline = VulkanRuntime::createComputePipeline(device, smReconstruct, this->reconstructLayout);
 }
+
+void IQM::LPIPS::createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::PipelineLayout &layout) {
+    unsigned big = this->blocks[0].kernelSize;
+    unsigned medium = this->blocks[1].kernelSize;
+    unsigned small = this->blocks[2].kernelSize;
+
+    vk::SpecializationMapEntry entry { 0, 0, sizeof(int32_t) };
+    vk::SpecializationInfo specInfoBig {
+        1,
+        &entry,
+        sizeof(uint32_t),
+        &big,
+    };
+
+    vk::SpecializationInfo specInfoMedium {
+        1,
+        &entry,
+        sizeof(uint32_t),
+        &medium,
+    };
+
+    vk::SpecializationInfo specInfoSmall {
+        1,
+        &entry,
+        sizeof(uint32_t),
+        &small,
+    };
+
+    std::array createInfos {
+        vk::ComputePipelineCreateInfo {
+            .stage = vk::PipelineShaderStageCreateInfo {
+                .stage = vk::ShaderStageFlagBits::eCompute,
+                .module = sm,
+                // all shaders will start in main
+                .pName = "main",
+                .pSpecializationInfo = &specInfoBig,
+            },
+            .layout = layout,
+        },
+        vk::ComputePipelineCreateInfo {
+            .stage = vk::PipelineShaderStageCreateInfo {
+                .stage = vk::ShaderStageFlagBits::eCompute,
+                .module = sm,
+                // all shaders will start in main
+                .pName = "main",
+                .pSpecializationInfo = &specInfoMedium,
+            },
+            .layout = layout,
+        },
+        vk::ComputePipelineCreateInfo {
+            .stage = vk::PipelineShaderStageCreateInfo {
+                .stage = vk::ShaderStageFlagBits::eCompute,
+                .module = sm,
+                // all shaders will start in main
+                .pName = "main",
+                .pSpecializationInfo = &specInfoSmall,
+            },
+            .layout = layout,
+        }
+    };
+
+    auto pipelines = vk::raii::Pipelines{device, nullptr, createInfos};
+    this->convPipelineBig = std::move(pipelines[0]);
+    this->convPipelineMedium = std::move(pipelines[1]);
+    this->convPipelineSmall = std::move(pipelines[2]);
+}
+
 
 void IQM::LPIPS::computeMetric(const LPIPSInput &input) {
     this->setUpDescriptors(input);
@@ -155,7 +222,7 @@ void IQM::LPIPS::preprocess(const LPIPSInput &input) {
 }
 
 void IQM::LPIPS::conv0(const LPIPSInput &input) {
-    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipeline);
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineBig);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[0]}, {});
     const auto widthPass = dimensionFn(input.width, this->blocks[0].padding, this->blocks[0].kernelSize, this->blocks[0].stride);
     const auto heightPass = dimensionFn(input.height, this->blocks[0].padding, this->blocks[0].kernelSize, this->blocks[0].stride);
@@ -239,7 +306,7 @@ void IQM::LPIPS::conv1(const LPIPSInput &input) {
     const auto widthPass3 = dimensionFn(widthPass2, 0, 3, 2);
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
-    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipeline);
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineMedium);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[1]}, {});
 
     const std::array pc = {
@@ -320,7 +387,7 @@ void IQM::LPIPS::conv2(const LPIPSInput &input) {
     const auto widthPass3 = dimensionFn(widthPass2, 0, 3, 2);
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
-    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipeline);
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[2]}, {});
 
     const std::array pc = {
@@ -366,7 +433,7 @@ void IQM::LPIPS::conv3(const LPIPSInput &input) {
     const auto widthPass3 = dimensionFn(widthPass2, 0, 3, 2);
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
-    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipeline);
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[3]}, {});
 
     const std::array pc = {
@@ -423,7 +490,7 @@ void IQM::LPIPS::conv4(const LPIPSInput &input) {
     const auto widthPass3 = dimensionFn(widthPass2, 0, 3, 2);
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
-    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipeline);
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[4]}, {});
 
     const std::array pc = {

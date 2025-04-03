@@ -60,21 +60,26 @@ namespace IQM {
             {
                 .kernelSize = 3,
                 .inChannels = 192,
-                .outChannels = 384
+                .outChannels = 384,
+                .padding = 1,
             },
             {
                 .kernelSize = 3,
                 .inChannels = 384,
-                .outChannels = 256
+                .outChannels = 256,
+                .padding = 1,
             },
             {
                 .kernelSize = 3,
                 .inChannels = 256,
-                .outChannels = 256
+                .outChannels = 256,
+                .padding = 1,
             }
         };
 
     private:
+        void createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::PipelineLayout &layout);
+
         void setUpDescriptors(const LPIPSInput& input) const;
         void preprocess(const LPIPSInput& input);
         void conv0(const LPIPSInput& input);
@@ -94,7 +99,9 @@ namespace IQM {
         vk::raii::DescriptorSet preprocessDescSet = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout convLayout = VK_NULL_HANDLE;
-        vk::raii::Pipeline convPipeline = VK_NULL_HANDLE;
+        vk::raii::Pipeline convPipelineBig = VK_NULL_HANDLE;
+        vk::raii::Pipeline convPipelineMedium = VK_NULL_HANDLE;
+        vk::raii::Pipeline convPipelineSmall = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout convDescSetLayout = VK_NULL_HANDLE;
         std::vector<vk::raii::DescriptorSet> convDescSetsTest;
         std::vector<vk::raii::DescriptorSet> convDescSetsRef;
