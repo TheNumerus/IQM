@@ -78,7 +78,7 @@ namespace IQM {
         };
 
     private:
-        void createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::PipelineLayout &layout);
+        void createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout);
 
         void setUpDescriptors(const LPIPSInput& input) const;
         void preprocess(const LPIPSInput& input);
