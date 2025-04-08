@@ -11,7 +11,8 @@ namespace IQM {
     struct LPIPSInput {
         const vk::raii::Device *device;
         const vk::raii::CommandBuffer *cmdBuf;
-        const vk::raii::ImageView *ivTest, *ivRef, *ivOut;
+        const vk::raii::ImageView *ivTest, *ivRef;
+        const vk::raii::Image *imgOut;
         const vk::raii::Buffer *bufWeights, *bufTest, *bufRef, *bufComp;
         unsigned width, height;
     };
@@ -40,7 +41,7 @@ namespace IQM {
     public:
         explicit LPIPS(const vk::raii::Device &device);
         [[nodiscard]] unsigned long modelSize() const;
-        LPIPSBufferSizes bufferSizes(unsigned width, unsigned height) const;
+        [[nodiscard]] LPIPSBufferSizes bufferSizes(unsigned width, unsigned height) const;
         void computeMetric(const LPIPSInput& input);
 
         const ConvParams blocks[5] = {
@@ -88,6 +89,7 @@ namespace IQM {
         void conv3(const LPIPSInput& input);
         void conv4(const LPIPSInput& input);
         void reconstruct(const LPIPSInput& input);
+        void average(const LPIPSInput& input);
 
         [[nodiscard]] ConvBufferHalves bufferHalves(unsigned width, unsigned height) const;
 
@@ -117,8 +119,13 @@ namespace IQM {
 
         vk::raii::PipelineLayout reconstructLayout = VK_NULL_HANDLE;
         vk::raii::Pipeline reconstructPipeline = VK_NULL_HANDLE;
-        vk::raii::DescriptorSetLayout reconstructDescSetLayout = VK_NULL_HANDLE;
         vk::raii::DescriptorSet reconstructDescSet = VK_NULL_HANDLE;
+
+        vk::raii::PipelineLayout sumLayout = VK_NULL_HANDLE;
+        vk::raii::Pipeline sumPipeline = VK_NULL_HANDLE;
+        vk::raii::Pipeline postprocessPipeline = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet sumDescSet = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout sumDescSetLayout = VK_NULL_HANDLE;
     };
 }
 

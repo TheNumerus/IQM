@@ -52,7 +52,7 @@ void IQM::Bin::lpips_run(const IQM::Bin::Args &args, const IQM::VulkanInstance &
                 .cmdBuf = &*instance.cmdBuf(),
                 .ivTest = &res.imageInput->imageView,
                 .ivRef = &res.imageRef->imageView,
-                .ivOut = &res.imageOut->imageView,
+                .imgOut = nullptr,
                 .bufWeights = &model.weightsBuf,
                 .bufTest = &res.convInputBuf,
                 .bufRef = &res.convRefBuf,
@@ -60,6 +60,10 @@ void IQM::Bin::lpips_run(const IQM::Bin::Args &args, const IQM::VulkanInstance &
                 .width = input.width,
                 .height = input.height,
             };
+
+            if (res.imageOut != nullptr) {
+                lpipsArgs.imgOut = &res.imageOut->image;
+            }
 
             const vk::CommandBufferBeginInfo beginInfo = {
                 .flags = vk::CommandBufferUsageFlags{vk::CommandBufferUsageFlagBits::eOneTimeSubmit},
@@ -126,13 +130,13 @@ void IQM::Bin::lpips_run(const IQM::Bin::Args &args, const IQM::VulkanInstance &
             auto result = lpips_copy_back(instance, res, timestamps, args.outputPath.has_value(), args.colorize);
 
             finishRenderDoc();
-            /*if (match.outPath.has_value()) {
+            if (match.outPath.has_value()) {
                 if (args.colorize) {
                     save_color_image(args.outputPath.value(), result.imageData, input.width, input.height);
                 } else {
                     save_char_image(args.outputPath.value(), result.imageData, input.width, input.height);
                 }
-            }*/
+            }
 
             const auto end = std::chrono::high_resolution_clock::now();
             std::cout << match.testPath << ": " << result.distance << std::endl;
@@ -177,7 +181,7 @@ void IQM::Bin::lpips_run_single(const IQM::ProfileArgs &args, const IQM::VulkanI
             .cmdBuf = &*instance.cmdBuf(),
             .ivTest = &res.imageInput->imageView,
             .ivRef = &res.imageRef->imageView,
-            .ivOut = &res.imageOut->imageView,
+            .imgOut = &res.imageOut->image,
             .bufWeights = &model.weightsBuf,
             .bufTest = &res.convInputBuf,
             .bufRef = &res.convRefBuf,
@@ -237,7 +241,7 @@ void IQM::Bin::lpips_run_single(const IQM::ProfileArgs &args, const IQM::VulkanI
 
 IQM::Bin::LPIPSResources IQM::Bin::lpips_init_res(const InputImage &test, const InputImage &ref, const IQM::VulkanInstance &instance, const LPIPSBufferSizes &bufferSizes, const bool hasOutput, const bool colorize) {
     // always 4 channels on input, with 1B per channel
-    const auto size = (test.width * test.height) * 4;
+    const auto size = (test.width * test.height + 1) * 4;
     const auto colormapSize = 256 * 4 * sizeof(float);
     auto [stgBuf, stgMem] = VulkanResource::createBuffer(
         *instance.device(),
@@ -475,12 +479,12 @@ IQM::Bin::LPIPSResult IQM::Bin::lpips_copy_back(const VulkanInstance &instance, 
     };
     instance.cmdBufTransfer()->begin(beginInfoCopy);
 
-    /*vk::BufferCopy bufCopy{
+    vk::BufferCopy bufCopy{
         .srcOffset = 0,
         .dstOffset = 0,
         .size = sizeof(float),
     };
-    instance.cmdBufTransfer()->copyBuffer(res.sumBuf, res.stgInput, bufCopy);
+    instance.cmdBufTransfer()->copyBuffer(res.convInputBuf, res.stgInput, bufCopy);
 
     if (hasOutput) {
         vk::BufferImageCopy copyRegion{
@@ -497,7 +501,7 @@ IQM::Bin::LPIPSResult IQM::Bin::lpips_copy_back(const VulkanInstance &instance, 
         } else {
             instance.cmdBufTransfer()->copyImageToBuffer(res.imageExport->image, vk::ImageLayout::eGeneral, res.stgInput, {copyRegion});
         }
-    }*/
+    }
 
     instance.cmdBufTransfer()->end();
 
@@ -521,8 +525,8 @@ IQM::Bin::LPIPSResult IQM::Bin::lpips_copy_back(const VulkanInstance &instance, 
 
     timestamps.mark("end GPU work");
 
-    /*void * outBufData = res.stgInputMemory.mapMemory(0, sizeof(float) + res.imageInput->width * res.imageInput->height * 4, {});
-    memcpy(&result.db, outBufData, sizeof(float));
+    void * outBufData = res.stgInputMemory.mapMemory(0, sizeof(float) + res.imageInput->width * res.imageInput->height * 4, {});
+    memcpy(&result.distance, outBufData, sizeof(float));
 
     if (hasOutput) {
         if (colorize) {
@@ -536,7 +540,7 @@ IQM::Bin::LPIPSResult IQM::Bin::lpips_copy_back(const VulkanInstance &instance, 
         }
     }
 
-    res.stgInputMemory.unmapMemory();*/
+    res.stgInputMemory.unmapMemory();
     timestamps.mark("end copy from GPU");
 
     return result;

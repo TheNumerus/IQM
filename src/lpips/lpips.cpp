@@ -29,6 +29,14 @@ static std::vector<uint32_t> srcReconstruct =
 #include <lpips/reconstruct.inc>
 ;
 
+static std::vector<uint32_t> srcSum =
+#include <lpips/sum.inc>
+;
+
+static std::vector<uint32_t> srcPostprocess =
+#include <lpips/postprocess.inc>
+;
+
 using IQM::GPU::VulkanRuntime;
 
 unsigned dimensionFn(const unsigned size, const unsigned padding, const unsigned kernelSize, const unsigned stride) {
@@ -42,10 +50,12 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     const auto smCompare = VulkanRuntime::createShaderModule(device, srcComapreRelu);
     const auto smMaxpool = VulkanRuntime::createShaderModule(device, srcMaxpool);
     const auto smReconstruct = VulkanRuntime::createShaderModule(device, srcReconstruct);
+    const auto smSum = VulkanRuntime::createShaderModule(device, srcSum);
+    const auto smPostprocess = VulkanRuntime::createShaderModule(device, srcPostprocess);
 
-    this->descPool = VulkanRuntime::createDescPool(device, 24, {
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 64},
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 4}
+    this->descPool = VulkanRuntime::createDescPool(device, 32, {
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 80},
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 16}
     });
 
     this->preprocessDescSetLayout = VulkanRuntime::createDescLayout(device, {
@@ -65,14 +75,14 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
         {vk::DescriptorType::eStorageBuffer, 1},
     });
 
-    this->reconstructDescSetLayout = VulkanRuntime::createDescLayout(device, {
+    this->sumDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
-        {vk::DescriptorType::eStorageImage, 1},
     });
 
     std::vector allDescLayouts = {
         *this->preprocessDescSetLayout,
-        *this->reconstructDescSetLayout,
+        *this->maxPoolDescSetLayout,
+        *this->sumDescSetLayout,
     };
 
     for (int i = 0; i < 4; i++) {
@@ -92,17 +102,18 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     auto sets = vk::raii::DescriptorSets{device, descriptorSetAllocateInfo};
     this->preprocessDescSet = std::move(sets[0]);
     this->reconstructDescSet = std::move(sets[1]);
+    this->sumDescSet = std::move(sets[2]);
 
-    for (int i = 2; i < 6; i++) {
+    for (int i = 3; i < 7; i++) {
         this->maxPoolDescSets.push_back(std::move(sets[i]));
     }
-    for (int i = 6; i < 11; i++) {
+    for (int i = 7; i < 12; i++) {
         this->convDescSetsTest.push_back(std::move(sets[i]));
     }
-    for (int i = 11; i < 16; i++) {
+    for (int i = 12; i < 17; i++) {
         this->convDescSetsRef.push_back(std::move(sets[i]));
     }
-    for (int i = 16; i < 21; i++) {
+    for (int i = 17; i < 22; i++) {
         this->compareDescSets.push_back(std::move(sets[i]));
     }
 
@@ -121,9 +132,14 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     this->compareLayout = VulkanRuntime::createPipelineLayout(device, {this->convDescSetLayout}, {compareRange});
     this->comparePipeline = VulkanRuntime::createComputePipeline(device, smCompare, this->compareLayout);
 
-    const auto reconstructRange = VulkanRuntime::createPushConstantRange(6 * sizeof(uint32_t));
-    this->reconstructLayout = VulkanRuntime::createPipelineLayout(device, {this->reconstructDescSetLayout}, {reconstructRange});
+    const auto reconstructRange = VulkanRuntime::createPushConstantRange(8 * sizeof(uint32_t));
+    this->reconstructLayout = VulkanRuntime::createPipelineLayout(device, {this->maxPoolDescSetLayout}, {reconstructRange});
     this->reconstructPipeline = VulkanRuntime::createComputePipeline(device, smReconstruct, this->reconstructLayout);
+
+    const auto sumRange = VulkanRuntime::createPushConstantRange(1 * sizeof(uint32_t));
+    this->sumLayout = VulkanRuntime::createPipelineLayout(device, {this->sumDescSetLayout}, {sumRange});
+    this->sumPipeline = VulkanRuntime::createComputePipeline(device, smSum, this->sumLayout);
+    this->postprocessPipeline = VulkanRuntime::createComputePipeline(device, smPostprocess, this->sumLayout);
 }
 
 void IQM::LPIPS::createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout) {
@@ -203,6 +219,7 @@ void IQM::LPIPS::computeMetric(const LPIPSInput &input) {
     this->conv3(input);
     this->conv4(input);
     this->reconstruct(input);
+    this->average(input);
 }
 
 void IQM::LPIPS::preprocess(const LPIPSInput &input) {
@@ -572,6 +589,8 @@ void IQM::LPIPS::reconstruct(const LPIPSInput &input) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->reconstructPipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->reconstructLayout, 0, {this->reconstructDescSet}, {});
     const std::array pc = {
+        input.width,
+        input.height,
         widthPass1,
         heightPass1,
         widthPass2,
@@ -585,6 +604,83 @@ void IQM::LPIPS::reconstruct(const LPIPSInput &input) {
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(input.width, input.height, 16);
 
     input.cmdBuf->dispatch(groupsX, groupsY, 1);
+
+    vk::MemoryBarrier memoryBarrier = {
+        .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+        .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead,
+    };
+
+    input.cmdBuf->pipelineBarrier(
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer,
+        vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
+    );
+
+    if (input.imgOut != nullptr) {
+        auto region = vk::BufferImageCopy {
+            .bufferOffset = 0,
+            .bufferRowLength = input.width,
+            .bufferImageHeight = input.height,
+            .imageSubresource = vk::ImageSubresourceLayers{.aspectMask = vk::ImageAspectFlagBits::eColor, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1},
+            .imageOffset = vk::Offset3D{0, 0, 0},
+            .imageExtent = vk::Extent3D{input.width, input.height, 1},
+        };
+
+        input.cmdBuf->copyBufferToImage(*input.bufTest, *input.imgOut, vk::ImageLayout::eGeneral, {region});
+
+        memoryBarrier = {
+            .srcAccessMask = vk::AccessFlagBits::eTransferWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+        };
+
+        input.cmdBuf->pipelineBarrier(
+            vk::PipelineStageFlagBits::eTransfer,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup, {memoryBarrier}, {}, {}
+        );
+    }
+}
+
+void IQM::LPIPS::average(const LPIPSInput &input) {
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->sumPipeline);
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->sumLayout, 0, {this->sumDescSet}, {});
+
+    const auto sumSize = 1024;
+
+    uint32_t bufferSize = (input.width) * (input.height);
+    uint64_t groups = (bufferSize / sumSize) + 1;
+    uint32_t size = bufferSize;
+
+    for (;;) {
+        input.cmdBuf->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, 0, size);
+        input.cmdBuf->dispatch(groups, 1, 1);
+
+        vk::BufferMemoryBarrier barrier = {
+            .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead,
+            .buffer = *input.bufTest,
+            .offset = 0,
+            .size = bufferSize * sizeof(float),
+        };
+        input.cmdBuf->pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::DependencyFlagBits::eDeviceGroup,
+            {},
+            {barrier},
+            {}
+        );
+        if (groups == 1) {
+            break;
+        }
+        size = groups;
+        groups = (groups / sumSize) + 1;
+    }
+
+    input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->postprocessPipeline);
+    input.cmdBuf->pushConstants<unsigned>(this->sumLayout, vk::ShaderStageFlagBits::eCompute, 0, bufferSize);
+
+    input.cmdBuf->dispatch(1, 1, 1);
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
@@ -611,10 +707,6 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     const auto inputImageInfos = VulkanRuntime::createImageInfos({
         input.ivTest,
         input.ivRef,
-    });
-
-    const auto outputImageInfo = VulkanRuntime::createImageInfos({
-        input.ivOut,
     });
 
     const auto bufferHalves = this->bufferHalves(input.width, input.height);
@@ -955,7 +1047,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
 
     //reconstruct
     writes.push_back(VulkanRuntime::createWriteSet(this->reconstructDescSet, 0, compTotalInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->reconstructDescSet, 1, outputImageInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->reconstructDescSet, 1, convFlipTestBufInfo));
+
+    //sum + postprocess
+    writes.push_back(VulkanRuntime::createWriteSet(this->sumDescSet, 0, convFlipTestBufInfo));
 
     input.device->updateDescriptorSets({writes}, nullptr);
 }
