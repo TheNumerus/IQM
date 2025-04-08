@@ -79,7 +79,7 @@ namespace IQM {
         };
 
     private:
-        void createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout);
+        void createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout, const vk::raii::PipelineLayout &layoutBig);
 
         void setUpDescriptors(const LPIPSInput& input) const;
         void preprocess(const LPIPSInput& input);
@@ -101,10 +101,13 @@ namespace IQM {
         vk::raii::DescriptorSet preprocessDescSet = VK_NULL_HANDLE;
 
         vk::raii::PipelineLayout convLayout = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout convLayoutBig = VK_NULL_HANDLE;
         vk::raii::Pipeline convPipelineBig = VK_NULL_HANDLE;
         vk::raii::Pipeline convPipelineMedium = VK_NULL_HANDLE;
         vk::raii::Pipeline convPipelineSmall = VK_NULL_HANDLE;
         vk::raii::DescriptorSetLayout convDescSetLayout = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout convDescSetLayoutBig = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet convDescSetBig = VK_NULL_HANDLE;
         std::vector<vk::raii::DescriptorSet> convDescSetsTest;
         std::vector<vk::raii::DescriptorSet> convDescSetsRef;
 

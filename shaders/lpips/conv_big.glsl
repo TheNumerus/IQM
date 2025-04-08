@@ -11,12 +11,12 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 layout (constant_id = 0) const int KERNEL_SIZE = 11;
 
 layout(std430, set = 0, binding = 0) buffer InBuf {
-    float inData[];
-};
+    float data[];
+} inBufs[2];
 
 layout(std430, set = 0, binding = 1) buffer OutBuf {
-    float outData[];
-};
+    float data[];
+} outBufs[2];
 
 layout(std430, set = 0, binding = 2) buffer WeightBuf {
     float weights[];
@@ -46,7 +46,8 @@ void main() {
         return;
     }
 
-    float valueTotal = 0.0;
+    float valueTotalTest = 0.0;
+    float valueTotalRef = 0.0;
 
     int halfSize = KERNEL_SIZE / 2;
     int srcCenterX = int(x * push_consts.stride + halfSize) - int(push_consts.padding);
@@ -54,22 +55,6 @@ void main() {
 
     uint channelSize = push_consts.width * push_consts.height;
     uint targetChannelSize = push_consts.targetWidth * push_consts.targetHeight;
-
-    /*for (int i = 0; i < push_consts.inChannels; i++) {
-        int inChannelOffset = i * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z);
-
-        for (int y = 0; y < KERNEL_SIZE; y++) {
-            for (int x = 0; x < KERNEL_SIZE; x++) {
-                int posOffset = (KERNEL_SIZE * (y) + (x)) * int(gl_NumWorkGroups.z);
-
-                float value = inputs[x + gl_LocalInvocationID.x][y + gl_LocalInvocationID.y][i];
-
-                float weight = weights[inChannelOffset + posOffset + z];
-
-                valueTotal += value * weight;
-            }
-        }
-    }*/
 
     // center tiles no not have to worry about accessing out of bounds data
     if (gl_WorkGroupID.x == 0 || (gl_WorkGroupID.x + 2 >= gl_NumWorkGroups.x) || gl_WorkGroupID.y == 0 || (gl_WorkGroupID.y + 2 >= gl_NumWorkGroups.y)) {
@@ -83,14 +68,17 @@ void main() {
 
                     int srcX = srcCenterX + x;
 
-                    float value = 0.0;
+                    float valueTest = 0.0;
+                    float valueRef = 0.0;
                     if (srcX >= 0 && srcX < push_consts.width && srcY >= 0 && srcY < push_consts.height) {
-                        value = inData[channelSize * i + srcX + push_consts.width * srcY];
+                        valueTest = inBufs[0].data[channelSize * i + srcX + push_consts.width * srcY];
+                        valueRef = inBufs[1].data[channelSize * i + srcX + push_consts.width * srcY];
                     }
 
                     float weight = weights[inChannelOffset + posOffset + z];
 
-                    valueTotal += value * weight;
+                    valueTotalTest += valueTest * weight;
+                    valueTotalRef += valueRef * weight;
                 }
             }
         }
@@ -105,16 +93,20 @@ void main() {
 
                     int srcX = srcCenterX + x;
 
-                    float value = inData[channelSize * i + srcX + push_consts.width * srcY];
+                    float valueTest = inBufs[0].data[channelSize * i + srcX + push_consts.width * srcY];
+                    float valueRef = inBufs[1].data[channelSize * i + srcX + push_consts.width * srcY];
 
                     float weight = weights[inChannelOffset + posOffset + z];
 
-                    valueTotal += value * weight;
+                    valueTotalTest += valueTest * weight;
+                    valueTotalRef += valueRef * weight;
                 }
             }
         }
     }
 
-    float relu = max(0.0, valueTotal + biases[z]);
-    outData[targetChannelSize * z + x + push_consts.targetWidth * y] = relu;
+    float reluTest = max(0.0, valueTotalTest + biases[z]);
+    float reluRef = max(0.0, valueTotalRef + biases[z]);
+    outBufs[0].data[targetChannelSize * z + x + push_consts.targetWidth * y] = reluTest;
+    outBufs[1].data[targetChannelSize * z + x + push_consts.targetWidth * y] = reluRef;
 }
