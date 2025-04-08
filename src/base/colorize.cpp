@@ -12,8 +12,8 @@ static std::vector<uint32_t> src =
 using IQM::GPU::VulkanRuntime;
 
 IQM::Colorize::Colorize(const vk::raii::Device &device):
-descPool(VulkanRuntime::createDescPool(device, 4, {
-    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 4}
+descPool(VulkanRuntime::createDescPool(device, 8, {
+    vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 8}
 })) {
     const auto sm = VulkanRuntime::createShaderModule(device, src);
 

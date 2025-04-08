@@ -40,7 +40,7 @@ layout( push_constant ) uniform constants {
     uint stride;
 } push_consts;
 
-shared float cache[CACHE_DIM][CACHE_DIM];
+shared float cache[4][CACHE_DIM][CACHE_DIM];
 
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -52,25 +52,43 @@ void main() {
     uint channelSize = push_consts.width * push_consts.height;
     uint targetChannelSize = push_consts.targetWidth * push_consts.targetHeight;
 
-    for (int i = 0; i < push_consts.inChannels; i++) {
-        int inChannelOffset = i * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z * gl_WorkGroupSize.z);
+    int sx = int(gl_LocalInvocationID.z) % 2;
+    int sy = (int(gl_LocalInvocationID.z) / 2) & 1;
+    int sz = int(gl_LocalInvocationID.z) / 4;
+    int piX = int(sx * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
+    int piY = int(sy * gl_WorkGroupSize.y + gl_LocalInvocationID.y);
+    int actX = int(x + sx * gl_WorkGroupSize.x) - int(push_consts.padding);
+    int actY = int(y + sy * gl_WorkGroupSize.y) - int(push_consts.padding);
 
-        if (gl_LocalInvocationID.z == 0) {
-            // populate src cache to eliminate redundant accesses
-            for (int sy = 0; sy < 2; sy++) {
-                for (int sx = 0; sx < 2; sx++) {
-                    int piX = int(sx * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
-                    int piY = int(sy * gl_WorkGroupSize.y + gl_LocalInvocationID.y);
-                    int actX = int((x + sx * gl_WorkGroupSize.x) * push_consts.stride) - int(push_consts.padding);
-                    int actY = int((y + sy * gl_WorkGroupSize.y) * push_consts.stride) - int(push_consts.padding);
+    bool run = !(x >= push_consts.targetWidth || y >= push_consts.targetHeight);
 
-                    if (piX < CACHE_DIM && piY < CACHE_DIM) {
-                        if (0 <= actX && actX < int(push_consts.width) && 0 <= actY && actY < int(push_consts.height)) {
-                            float value = inData[channelSize * i + actX + push_consts.width * actY];
-                            cache[piX][piY] = value;
-                        } else {
-                            cache[piX][piY] = 0.0;
-                        }
+    for (int i = 0; i < push_consts.inChannels / 4; i++) {
+
+        // populate src cache to eliminate redundant accesses
+        if (piX < CACHE_DIM && piY < CACHE_DIM) {
+            if (0 <= actX && actX < int(push_consts.width) && 0 <= actY && actY < int(push_consts.height)) {
+                float value = inData[channelSize * int(i * 4 + sz) + actX + push_consts.width * actY];
+                cache[sz][piX][piY] = value;
+            } else {
+                cache[sz][piX][piY] = 0.0;
+            }
+        }
+
+        memoryBarrierShared();
+        barrier();
+
+        if (run) {
+            for (int oz = 0; oz < 4; oz++) {
+                int inChannelOffset = (i * 4 + oz) * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z * gl_WorkGroupSize.z);
+                for (int ox = 0; ox < KERNEL_SIZE; ox++) {
+                    for (int oy = 0; oy < KERNEL_SIZE; oy++) {
+                        int posOffset = (KERNEL_SIZE * (oy) + (ox)) * int(gl_NumWorkGroups.z * gl_WorkGroupSize.z);
+
+                        float value = cache[oz][ox + gl_LocalInvocationID.x][oy + gl_LocalInvocationID.y];
+
+                        float weight = weights[inChannelOffset + posOffset + z];
+
+                        valueTotal += value * weight;
                     }
                 }
             }
@@ -78,24 +96,9 @@ void main() {
 
         memoryBarrierShared();
         barrier();
-
-        for (int ox = 0; ox < KERNEL_SIZE; ox++) {
-            for (int oy = 0; oy < KERNEL_SIZE; oy++) {
-                int posOffset = (KERNEL_SIZE * (oy) + (ox)) * int(gl_NumWorkGroups.z * gl_WorkGroupSize.z);
-
-                float value = cache[ox + gl_LocalInvocationID.x][oy + gl_LocalInvocationID.y];
-
-                float weight = weights[inChannelOffset + posOffset + z];
-
-                valueTotal += value * weight;
-            }
-        }
-
-        memoryBarrierShared();
-        barrier();
     }
 
-    if (x >= push_consts.targetWidth || y >= push_consts.targetHeight) {
+    if (!run) {
         return;
     }
 

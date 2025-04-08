@@ -55,7 +55,7 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
 
     this->descPool = VulkanRuntime::createDescPool(device, 32, {
         vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 80},
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 16}
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 24}
     });
 
     this->preprocessDescSetLayout = VulkanRuntime::createDescLayout(device, {
