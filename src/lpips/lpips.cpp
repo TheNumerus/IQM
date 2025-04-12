@@ -63,14 +63,14 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
         {vk::DescriptorType::eStorageBuffer, 2},
     });
 
-    this->convDescSetLayout = VulkanRuntime::createDescLayout(device, {
+    this->compareDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
         {vk::DescriptorType::eStorageBuffer, 1},
     });
 
-    this->convDescSetLayoutBig = VulkanRuntime::createDescLayout(device, {
+    this->convDescSetLayout = VulkanRuntime::createDescLayout(device, {
         {vk::DescriptorType::eStorageBuffer, 2},
         {vk::DescriptorType::eStorageBuffer, 2},
         {vk::DescriptorType::eStorageBuffer, 1},
@@ -90,15 +90,18 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
         *this->preprocessDescSetLayout,
         *this->maxPoolDescSetLayout,
         *this->sumDescSetLayout,
-        *this->convDescSetLayoutBig,
     };
 
     for (int i = 0; i < 4; i++) {
         allDescLayouts.push_back(*this->maxPoolDescSetLayout);
     }
 
-    for (int i = 0; i < 13; i++) {
+    for (int i = 0; i < 5; i++) {
         allDescLayouts.push_back(*this->convDescSetLayout);
+    }
+
+    for (int i = 0; i < 5; i++) {
+        allDescLayouts.push_back(*this->compareDescSetLayout);
     }
 
     vk::DescriptorSetAllocateInfo descriptorSetAllocateInfo = {
@@ -111,18 +114,14 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     this->preprocessDescSet = std::move(sets[0]);
     this->reconstructDescSet = std::move(sets[1]);
     this->sumDescSet = std::move(sets[2]);
-    this->convDescSetBig = std::move(sets[3]);
 
-    for (int i = 4; i < 8; i++) {
+    for (int i = 3; i < 7; i++) {
         this->maxPoolDescSets.push_back(std::move(sets[i]));
     }
-    for (int i = 8; i < 12; i++) {
-        this->convDescSetsTest.push_back(std::move(sets[i]));
+    for (int i = 7; i < 12; i++) {
+        this->convDescSets.push_back(std::move(sets[i]));
     }
-    for (int i = 12; i < 16; i++) {
-        this->convDescSetsRef.push_back(std::move(sets[i]));
-    }
-    for (int i = 16; i < 21; i++) {
+    for (int i = 12; i < 17; i++) {
         this->compareDescSets.push_back(std::move(sets[i]));
     }
 
@@ -131,15 +130,14 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
 
     const auto convRange = VulkanRuntime::createPushConstantRange(8 * sizeof(uint32_t));
     this->convLayout = VulkanRuntime::createPipelineLayout(device, {this->convDescSetLayout}, {convRange});
-    this->convLayoutBig = VulkanRuntime::createPipelineLayout(device, {this->convDescSetLayoutBig}, {convRange});
-    this->createConvPipelines(device, smConv, smConvBig, this->convLayout, this->convLayoutBig);
+    this->createConvPipelines(device, smConv, smConvBig, this->convLayout);
 
     const auto maxPoolRange = VulkanRuntime::createPushConstantRange(4 * sizeof(uint32_t));
     this->maxPoolLayout = VulkanRuntime::createPipelineLayout(device, {this->maxPoolDescSetLayout}, {maxPoolRange});
     this->maxPoolPipeline = VulkanRuntime::createComputePipeline(device, smMaxpool, this->maxPoolLayout);
 
     const auto compareRange = VulkanRuntime::createPushConstantRange(3 * sizeof(uint32_t));
-    this->compareLayout = VulkanRuntime::createPipelineLayout(device, {this->convDescSetLayout}, {compareRange});
+    this->compareLayout = VulkanRuntime::createPipelineLayout(device, {this->compareDescSetLayout}, {compareRange});
     this->comparePipeline = VulkanRuntime::createComputePipeline(device, smCompare, this->compareLayout);
 
     const auto reconstructRange = VulkanRuntime::createPushConstantRange(8 * sizeof(uint32_t));
@@ -152,7 +150,7 @@ IQM::LPIPS::LPIPS(const vk::raii::Device &device) {
     this->postprocessPipeline = VulkanRuntime::createComputePipeline(device, smPostprocess, this->sumLayout);
 }
 
-void IQM::LPIPS::createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout, const vk::raii::PipelineLayout &layoutBig) {
+void IQM::LPIPS::createConvPipelines(const vk::raii::Device &device, const vk::raii::ShaderModule &sm, const vk::raii::ShaderModule &smBig, const vk::raii::PipelineLayout &layout) {
     unsigned big = this->blocks[0].kernelSize;
     unsigned medium = this->blocks[1].kernelSize;
     unsigned small = this->blocks[2].kernelSize;
@@ -188,7 +186,7 @@ void IQM::LPIPS::createConvPipelines(const vk::raii::Device &device, const vk::r
                 .pName = "main",
                 .pSpecializationInfo = &specInfoBig,
             },
-            .layout = layoutBig,
+            .layout = layout,
         },
         vk::ComputePipelineCreateInfo {
             .stage = vk::PipelineShaderStageCreateInfo {
@@ -255,7 +253,7 @@ void IQM::LPIPS::preprocess(const LPIPSInput &input) {
 
 void IQM::LPIPS::conv0(const LPIPSInput &input) {
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineBig);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayoutBig, 0, {this->convDescSetBig}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSets[0]}, {});
     const auto widthPass = dimensionFn(input.width, this->blocks[0].padding, this->blocks[0].kernelSize, this->blocks[0].stride);
     const auto heightPass = dimensionFn(input.height, this->blocks[0].padding, this->blocks[0].kernelSize, this->blocks[0].stride);
     const std::array pc = {
@@ -335,7 +333,7 @@ void IQM::LPIPS::conv1(const LPIPSInput &input) {
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineMedium);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[0]}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSets[1]}, {});
 
     const std::array pc = {
         widthPass2,
@@ -351,10 +349,6 @@ void IQM::LPIPS::conv1(const LPIPSInput &input) {
 
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass2, heightPass2, 8);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass2, heightPass2, 16);
-
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[1].outChannels / 16);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsRef[0]}, {});
 
     input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[1].outChannels / 16);
 
@@ -416,7 +410,7 @@ void IQM::LPIPS::conv2(const LPIPSInput &input) {
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[1]}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSets[2]}, {});
 
     const std::array pc = {
         widthPass3,
@@ -432,10 +426,6 @@ void IQM::LPIPS::conv2(const LPIPSInput &input) {
 
     //shaders work in 16x16 tiles
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
-
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[2].outChannels / 16);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsRef[1]}, {});
 
     input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[2].outChannels / 16);
 
@@ -462,7 +452,7 @@ void IQM::LPIPS::conv3(const LPIPSInput &input) {
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[2]}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSets[3]}, {});
 
     const std::array pc = {
         widthPass3,
@@ -478,10 +468,6 @@ void IQM::LPIPS::conv3(const LPIPSInput &input) {
 
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 16);
-
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[3].outChannels / 16);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsRef[2]}, {});
 
     input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[3].outChannels / 16);
 
@@ -519,7 +505,7 @@ void IQM::LPIPS::conv4(const LPIPSInput &input) {
     const auto heightPass3 = dimensionFn(heightPass2, 0, 3, 2);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->convPipelineSmall);
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsTest[3]}, {});
+    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSets[4]}, {});
 
     const std::array pc = {
         widthPass3,
@@ -535,10 +521,6 @@ void IQM::LPIPS::conv4(const LPIPSInput &input) {
 
     auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 16);
-
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[4].outChannels / 16);
-
-    input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->convLayout, 0, {this->convDescSetsRef[3]}, {});
 
     input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[4].outChannels / 16);
 
@@ -981,10 +963,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     writes.push_back(VulkanRuntime::createWriteSet(this->preprocessDescSet, 1, preBufInfo));
 
     //conv0
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetBig, 0, convFlipsBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetBig, 1, convFlopsBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetBig, 2, conv0WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetBig, 3, conv0BiasBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[0], 0, convFlipsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[0], 1, convFlopsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[0], 2, conv0WeightBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[0], 3, conv0BiasBufInfo));
 
     //maxpool0
     writes.push_back(VulkanRuntime::createWriteSet(this->maxPoolDescSets[0], 0, convFlopTestBufInfo));
@@ -999,15 +981,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[0], 3, comp0WeightBufInfo));
 
     //conv1
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[0], 0, convFlipTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[0], 1, convFlopTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[0], 2, conv1WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[0], 3, conv1BiasBufInfo));
-
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[0], 0, convFlipRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[0], 1, convFlopRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[0], 2, conv1WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[0], 3, conv1BiasBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[1], 0, convFlipsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[1], 1, convFlopsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[1], 2, conv1WeightBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[1], 3, conv1BiasBufInfo));
 
     //maxpool1
     writes.push_back(VulkanRuntime::createWriteSet(this->maxPoolDescSets[2], 0, convFlopTestBufInfo));
@@ -1022,15 +999,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[1], 3, comp1WeightBufInfo));
 
     //conv2
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[1], 0, convFlipTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[1], 1, convFlopTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[1], 2, conv2WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[1], 3, conv2BiasBufInfo));
-
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[1], 0, convFlipRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[1], 1, convFlopRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[1], 2, conv2WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[1], 3, conv2BiasBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[2], 0, convFlipsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[2], 1, convFlopsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[2], 2, conv2WeightBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[2], 3, conv2BiasBufInfo));
 
     //compare2
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[2], 0, convFlopTestBufInfo));
@@ -1039,15 +1011,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[2], 3, comp2WeightBufInfo));
 
     //conv3
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[2], 0, convFlopTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[2], 1, convFlipTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[2], 2, conv3WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[2], 3, conv3BiasBufInfo));
-
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[2], 0, convFlopRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[2], 1, convFlipRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[2], 2, conv3WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[2], 3, conv3BiasBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[3], 0, convFlopsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[3], 1, convFlipsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[3], 2, conv3WeightBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[3], 3, conv3BiasBufInfo));
 
     //compare3
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[3], 0, convFlipTestBufInfo));
@@ -1056,15 +1023,10 @@ void IQM::LPIPS::setUpDescriptors(const LPIPSInput &input) const {
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[3], 3, comp3WeightBufInfo));
 
     //conv4
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[3], 0, convFlipTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[3], 1, convFlopTestBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[3], 2, conv4WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsTest[3], 3, conv4BiasBufInfo));
-
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[3], 0, convFlipRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[3], 1, convFlopRefBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[3], 2, conv4WeightBufInfo));
-    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSetsRef[3], 3, conv4BiasBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[4], 0, convFlipsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[4], 1, convFlopsBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[4], 2, conv4WeightBufInfo));
+    writes.push_back(VulkanRuntime::createWriteSet(this->convDescSets[4], 3, conv4BiasBufInfo));
 
     //compare4
     writes.push_back(VulkanRuntime::createWriteSet(this->compareDescSets[4], 0, convFlopTestBufInfo));
