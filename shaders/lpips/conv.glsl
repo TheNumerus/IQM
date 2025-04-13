@@ -6,7 +6,7 @@
 #version 450
 #pragma shader_stage(compute)
 
-layout (local_size_x = 8, local_size_y = 8, local_size_z = 16) in;
+layout (local_size_x = 4, local_size_y = 4, local_size_z = 64) in;
 
 layout (constant_id = 0) const int KERNEL_SIZE = 5;
 
@@ -40,7 +40,7 @@ layout( push_constant ) uniform constants {
     uint stride;
 } push_consts;
 
-shared float cache[4][CACHE_DIM][CACHE_DIM];
+shared float cache[16][CACHE_DIM][CACHE_DIM];
 
 void main() {
     uint x = gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
@@ -55,8 +55,8 @@ void main() {
 
     int sx = int(gl_LocalInvocationID.z) & 1;
     int sy = (int(gl_LocalInvocationID.z) >> 1) & 1;
-    int sz = (int(gl_LocalInvocationID.z) >> 2) & 1;
-    int tr = (int(gl_LocalInvocationID.z) >> 3) & 1;
+    int sz = (int(gl_LocalInvocationID.z) >> 2) & 7;
+    int tr = (int(gl_LocalInvocationID.z) >> 5) & 1;
     int piX = int(sx * gl_WorkGroupSize.x + gl_LocalInvocationID.x);
     int piY = int(sy * gl_WorkGroupSize.y + gl_LocalInvocationID.y);
     int actX = int(x + sx * gl_WorkGroupSize.x) - int(push_consts.padding);
@@ -64,14 +64,14 @@ void main() {
 
     bool run = !(x >= push_consts.targetWidth || y >= push_consts.targetHeight);
 
-    for (int i = 0; i < push_consts.inChannels / 2; i++) {
+    for (int i = 0; i < push_consts.inChannels / 8; i++) {
         // populate src cache to eliminate redundant accesses
         if (piX < CACHE_DIM && piY < CACHE_DIM) {
             if (0 <= actX && actX < int(push_consts.width) && 0 <= actY && actY < int(push_consts.height)) {
-                float value = inBufs[tr].data[channelSize * int(i * 2 + sz) + actX + push_consts.width * actY];
-                cache[sz + tr * 2][piX][piY] = value;
+                float value = inBufs[tr].data[channelSize * int(i * 8 + sz) + actX + push_consts.width * actY];
+                cache[sz + tr * 8][piX][piY] = value;
             } else {
-                cache[sz + tr * 2][piX][piY] = 0.0;
+                cache[sz + tr * 8][piX][piY] = 0.0;
             }
         }
 
@@ -79,14 +79,14 @@ void main() {
         barrier();
 
         if (run) {
-            for (int oz = 0; oz < 2; oz++) {
-                int inChannelOffset = (i * 2 + oz) * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z * gl_WorkGroupSize.z);
+            for (int oz = 0; oz < 8; oz++) {
+                int inChannelOffset = (i * 8 + oz) * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z * gl_WorkGroupSize.z);
                 for (int ox = 0; ox < KERNEL_SIZE; ox++) {
                     for (int oy = 0; oy < KERNEL_SIZE; oy++) {
                         int posOffset = (KERNEL_SIZE * (oy) + (ox)) * int(gl_NumWorkGroups.z * gl_WorkGroupSize.z);
 
                         float valueTest = cache[oz][ox + gl_LocalInvocationID.x][oy + gl_LocalInvocationID.y];
-                        float valueRef = cache[2 + oz][ox + gl_LocalInvocationID.x][oy + gl_LocalInvocationID.y];
+                        float valueRef = cache[8 + oz][ox + gl_LocalInvocationID.x][oy + gl_LocalInvocationID.y];
 
                         float weight = weights[inChannelOffset + posOffset + z];
 

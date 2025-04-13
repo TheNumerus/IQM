@@ -347,10 +347,10 @@ void IQM::LPIPS::conv1(const LPIPSInput &input) {
     };
     input.cmdBuf->pushConstants<unsigned>(this->convLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
 
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass2, heightPass2, 8);
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass2, heightPass2, 4);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass2, heightPass2, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[1].outChannels / 16);
+    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[1].outChannels / 64);
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
@@ -425,9 +425,9 @@ void IQM::LPIPS::conv2(const LPIPSInput &input) {
     input.cmdBuf->pushConstants<unsigned>(this->convLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
 
     //shaders work in 16x16 tiles
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 4);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[2].outChannels / 16);
+    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[2].outChannels / 64);
 
     vk::MemoryBarrier memoryBarrier = {
         .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
@@ -466,10 +466,10 @@ void IQM::LPIPS::conv3(const LPIPSInput &input) {
     };
     input.cmdBuf->pushConstants<unsigned>(this->convLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
 
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 4);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[3].outChannels / 16);
+    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[3].outChannels / 64);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->comparePipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->compareLayout, 0, {this->compareDescSets[2]}, {});
@@ -519,10 +519,10 @@ void IQM::LPIPS::conv4(const LPIPSInput &input) {
     };
     input.cmdBuf->pushConstants<unsigned>(this->convLayout, vk::ShaderStageFlagBits::eCompute, 0, pc);
 
-    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 8);
+    auto [groupsX, groupsY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 4);
     auto [groupsCompareX, groupsCompareY] = VulkanRuntime::compute2DGroupCounts(widthPass3, heightPass3, 16);
 
-    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[4].outChannels / 16);
+    input.cmdBuf->dispatch(groupsX, groupsY, this->blocks[4].outChannels / 64);
 
     input.cmdBuf->bindPipeline(vk::PipelineBindPoint::eCompute, this->comparePipeline);
     input.cmdBuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, this->compareLayout, 0, {this->compareDescSets[3]}, {});
