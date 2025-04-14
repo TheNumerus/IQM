@@ -56,8 +56,8 @@ void main() {
     uint channelSize = push_consts.width * push_consts.height;
     uint targetChannelSize = push_consts.targetWidth * push_consts.targetHeight;
 
-    // center tiles no not have to worry about accessing out of bounds data
-    if (gl_WorkGroupID.x == 0 || (gl_WorkGroupID.x + 2 >= gl_NumWorkGroups.x) || gl_WorkGroupID.y == 0 || (gl_WorkGroupID.y + 2 >= gl_NumWorkGroups.y)) {
+    // center pixels no not have to worry about accessing out of bounds data
+    if ((srcCenterX - halfSize) < 0 || ((srcCenterX + halfSize + 1) >= push_consts.width) || (srcCenterY - halfSize) <= 0 || ((srcCenterY + halfSize + 1) >= push_consts.height)) {
         for (int i = 0; i < push_consts.inChannels; i++) {
             int inChannelOffset = i * int(KERNEL_SIZE * KERNEL_SIZE * gl_NumWorkGroups.z);
 
