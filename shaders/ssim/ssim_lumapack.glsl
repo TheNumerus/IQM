@@ -25,8 +25,9 @@ void main() {
         return;
     }
 
-    float lumaSrc = luminance(imageLoad(input_img[0], pos));
-    float lumaRef = luminance(imageLoad(input_img[1], pos));
+    // SSIM reference does the conversion in u8 format, so emulate that
+    float lumaSrc = round(luminance(imageLoad(input_img[0], pos)) * 255.0) / 255.0;
+    float lumaRef = round(luminance(imageLoad(input_img[1], pos)) * 255.0) / 255.0;
 
     imageStore(output_img[0], pos, vec4(lumaSrc, 0.0, 0.0, 0.0));
     imageStore(output_img[1], pos, vec4(lumaRef, 0.0, 0.0, 0.0));

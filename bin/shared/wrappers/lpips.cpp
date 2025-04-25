@@ -138,6 +138,8 @@ void IQM::Bin::lpips_run(const IQM::Bin::Args &args, const IQM::VulkanInstance &
                 }
             }
 
+            timestamps.mark("output saved");
+
             const auto end = std::chrono::high_resolution_clock::now();
             std::cout << match.testPath << ": " << result.distance << std::endl;
             if (args.verbose) {

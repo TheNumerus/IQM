@@ -35,8 +35,8 @@ IQM::SSIM::SSIM(const vk::raii::Device &device) {
     const auto smMssim = VulkanRuntime::createShaderModule(device, srcMssim);
 
     this->descPool = VulkanRuntime::createDescPool(device, 4, {
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 16},
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 16}
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 20},
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = 20}
     });
 
     this->descSetLayoutLumapack = VulkanRuntime::createDescLayout(device, {

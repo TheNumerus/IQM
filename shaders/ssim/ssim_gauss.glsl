@@ -29,7 +29,7 @@ void main() {
         return;
     }
 
-    vec2 total = vec2(0.0);
+    float total = 0.0;
     float totalWeight = 0.0;
     int start = -(push_consts.kernelSize - 1) / 2;
     int end = (push_consts.kernelSize - 1) / 2;
@@ -42,10 +42,10 @@ void main() {
             continue;
         }
         float weight = gaussWeight(yOffset, push_consts.sigma);
-        total += imageLoad(temp_img, ivec2(x, y)).xy * weight;
+        total += imageLoad(temp_img, ivec2(x, y)).x * weight;
         totalWeight += weight;
     }
     total /= totalWeight;
 
-    imageStore(output_img[push_consts.index], pos, vec4(total.x, total.y, 0.0, 0.0));
+    imageStore(output_img[push_consts.index], pos, vec4(total, 0.0, 0.0, 0.0));
 }
